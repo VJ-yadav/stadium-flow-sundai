@@ -4,3 +4,4 @@ dist/
 !.env.example
 data/raw/
 .DS_Store
+__pycache__/

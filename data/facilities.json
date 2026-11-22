@@ -1,0 +1,37 @@
+{
+  "note": "Where Red Sox fans park. 'listed' is the space count the Red Sox publish for the lot (mlb.com/redsox/ballpark/transportation/parking, read 2026-11-22). 'total' is the whole facility where a source gives it. 'fans' is the number of fan cars the model lets the facility hold on a game night: the listed figure, or a stated share of a big shared garage. 'kind' is surface, garage (levels above ground) or underground. Fields ending in _src say where a value came from; 'assumed' means nobody published it and it is a guess to be replaced. Optional 'rows_deg' sets which way the parking rows run (0 = east, 90 = south) when the footprint alone gets it wrong.",
+  "sources": {
+    "redsox": "https://www.mlb.com/redsox/ballpark/transportation/parking",
+    "vpne": "https://vpne.com/facilities/van-ness-garage/",
+    "thefenway": "https://thefenway.com/explore/park/",
+    "suffolk": "https://suffolk.com/project/401-park/",
+    "bdg": "https://www.boston-discovery-guide.com/boston-parking-garages-in-fenway.html",
+    "parkingaccess": "https://parkingaccess.com/fenway-park-parking",
+    "pru": "https://www.prudentialcenter.com/about/",
+    "osm": "OpenStreetMap tags on the mapped facility"
+  },
+  "facilities": [
+    {"name": "Kenmore Lot (73 Brookline Ave)", "lat": 42.34685, "lon": -71.09968, "osm_name": "Kenmore Lot", "kind": "surface", "levels": 1, "exits": 2, "listed": 150, "total": 194, "fans": 194, "fans_src": "osm capacity tag; overhead imagery shows about 190 marked stalls, more than the 150 the Red Sox list", "src": ["redsox", "osm"]},
+    {"name": "645 Beacon Street lot", "lat": 42.34838, "lon": -71.09776, "kind": "surface", "levels": 1, "exits": 1, "listed": 60, "fans": 40, "fans_src": "assumed: the lot mapped at this address only fits about 40 cars even stack-parked; the Red Sox list says 60", "src": ["redsox"]},
+    {"name": "Beacon Street / Maitland lot", "lat": 42.34717, "lon": -71.10159, "kind": "surface", "levels": 1, "exits": 2, "listed": 249, "fans": 249, "src": ["redsox", "osm"]},
+    {"name": "Fenway Center Bower Garage", "lat": 42.34722, "lon": -71.10131, "doors": [[42.3473, -71.10032]], "kind": "garage", "levels": 4, "levels_src": "assumed", "exits": 1, "listed": 100, "fans": 100, "src": ["redsox"]},
+    {"name": "401 Park (Landmark) Garage", "lat": 42.3449, "lon": -71.1022, "doors": [[42.34502, -71.10123]], "kind": "garage", "levels": 5, "levels_src": "suffolk: one level below grade, four above", "exits": 2, "listed": 400, "fans": 400, "src": ["redsox", "suffolk"]},
+    {"name": "Van Ness Garage (Target)", "lat": 42.34464, "lon": -71.09946, "doors": [[42.34495, -71.0991]], "kind": "underground", "kind_src": "vpne: a subterranean parking facility", "levels": 3, "levels_src": "assumed", "exits": 1, "listed": 200, "total": 521, "fans": 200, "src": ["redsox", "vpne", "bdg"]},
+    {"name": "Fenway Triangle Trilogy Garage", "lat": 42.34426, "lon": -71.10131, "doors": [[42.34442, -71.10011]], "kind": "underground", "kind_src": "assumed: parking is under the apartment towers", "levels": 3, "levels_src": "assumed", "exits": 2, "listed": 200, "total": 504, "fans": 200, "src": ["redsox", "bdg"]},
+    {"name": "Deaconess Garage (65 Kilmarnock St)", "lat": 42.34279, "lon": -71.09953, "kind": "garage", "kind_src": "assumed", "levels": 2, "levels_src": "assumed", "exits": 1, "listed": 50, "fans": 50, "src": ["redsox"]},
+    {"name": "Queensberry Garage", "lat": 42.34276, "lon": -71.09769, "kind": "garage", "kind_src": "assumed", "levels": 2, "levels_src": "assumed", "exits": 1, "listed": 100, "fans": 100, "src": ["redsox"]},
+    {"name": "Museum of Fine Arts garage", "lat": 42.3386, "lon": -71.0958, "osm_name": "MFA Garage", "kind": "garage", "levels": 4, "levels_src": "assumed", "exits": 2, "listed": 475, "fans": 475, "src": ["redsox", "osm"]},
+    {"name": "Van Ness Street lot (51 Van Ness)", "lat": 42.34576, "lon": -71.09694, "approx": true, "kind": "surface", "levels": 1, "exits": 1, "listed": 60, "fans": 60, "src": ["redsox"]},
+    {"name": "Van Ness / Jersey Street lot", "lat": 42.3453, "lon": -71.0984, "approx": true, "kind": "surface", "levels": 1, "exits": 1, "listed": 150, "fans": 150, "src": ["redsox"]},
+    {"name": "Tasty Burger lot (1301 Boylston)", "lat": 42.34474, "lon": -71.09839, "kind": "surface", "levels": 1, "exits": 1, "listed": 41, "fans": 41, "src": ["redsox"]},
+    {"name": "1330 Boylston Garage", "lat": 42.34413, "lon": -71.09827, "kind": "underground", "kind_src": "thefenway: this underground garage", "levels": 2, "levels_src": "assumed", "exits": 1, "listed": 50, "total": 293, "fans": 50, "src": ["redsox", "thefenway", "parkingaccess"]},
+    {"name": "1284 Boylston lot", "lat": 42.345, "lon": -71.0974, "approx": true, "kind": "surface", "levels": 1, "exits": 1, "listed": 30, "fans": 30, "src": ["redsox"]},
+    {"name": "Ipswich Garage", "lat": 42.34682, "lon": -71.09429, "osm_name": "Ipswich Street Garage", "kind": "garage", "levels": 2, "levels_src": "osm", "exits": 1, "listed": 150, "fans": 150, "src": ["redsox", "osm"]},
+    {"name": "Boston Conservatory lot (132 Ipswich)", "lat": 42.34729, "lon": -71.09375, "osm_name": "132 Ipswich Street Lot", "kind": "surface", "levels": 1, "exits": 1, "listed": 40, "fans": 40, "src": ["redsox", "osm"]},
+    {"name": "Hotel Commonwealth garage", "lat": 42.34859, "lon": -71.09533, "kind": "underground", "kind_src": "assumed: parking is under the hotel", "levels": 2, "levels_src": "assumed", "exits": 1, "listed": 132, "fans": 132, "src": ["redsox"]},
+    {"name": "Somerset Garage (425 Newbury)", "lat": 42.34826, "lon": -71.09056, "osm_name": "Somerset Garage", "kind": "garage", "levels": 6, "levels_src": "osm", "exits": 2, "listed": 500, "fans": 500, "src": ["redsox", "osm"]},
+    {"name": "Verb Hotel lot (1271 Boylston)", "lat": 42.34534, "lon": -71.09678, "kind": "surface", "levels": 1, "exits": 1, "total": 80, "fans": 40, "fans_src": "assumed: half the lot, the rest is hotel guests", "src": ["bdg"]},
+    {"name": "Prudential Center Garage", "lat": 42.34717, "lon": -71.08251, "osm_name": "Prudential Center Parking Garage", "doors": [[42.34648, -71.08147], [42.34587, -71.08446], [42.3479, -71.0823]], "kind": "underground", "kind_src": "osm: parking=underground; pru: enclosed garage under the complex", "levels": 3, "levels_src": "assumed", "exits": 4, "exits_src": "redsox: entrances at 800 Boylston, 111 Huntington, 35 Dalton, Ring Road", "listed": 3000, "total": 3000, "fans": 900, "fans_src": "assumed: 30% of the garage on a game night", "room": 1800, "room_src": "assumed: at most 60% of the garage", "official": true, "src": ["redsox", "pru", "osm"]},
+    {"name": "100 Clarendon Street Garage", "lat": 42.34805, "lon": -71.07508, "osm_name": "100 Clarendon Street Garage", "kind": "garage", "levels": 8, "levels_src": "osm", "exits": 2, "exits_src": "assumed", "listed": 2000, "total": 2000, "fans": 500, "fans_src": "assumed: 25% of the garage on a game night", "room": 1200, "room_src": "assumed: at most 60% of the garage", "official": true, "src": ["redsox", "osm"]}
+  ]
+}

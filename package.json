@@ -1,12 +1,14 @@
 {
-  "name": "stadium-flow-sundai",
+  "name": "stadium-flow-fenway",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "data": "python3 -I scripts/build_data.py"
+    "fetch": "python3 -I scripts/fetch_osm.py",
+    "data": "python3 -I scripts/build_data.py",
+    "check": "node scripts/check_sim.mjs"
   },
   "dependencies": {
     "3d-tiles-renderer": "^0.5.4",
