@@ -3,6 +3,8 @@
 A real 3D model of Gillette Stadium and Route 1 in Foxborough, MA. Built at Sundai Hack 150
 ("Building 3D worlds", MIT E38).
 
+**Team: start with [PLAN.md](PLAN.md)** for today's scope, goals, tasks and the shared data formats.
+
 After a big game, cars sit in the Gillette lots for an hour or more. Route 1 is the only road in
 or out. We can't widen it, but we can change **where people spend the wait**: in the stadium, or
 in their car with the engine running.
@@ -106,7 +108,7 @@ so no key reaches the browser. It holds no personal data: only counts per lot.
    Route 1 backs up. In ours, the chosen lots hold back and the road keeps moving. *Done when* a
    20-second clip makes the point without anyone explaining it.
 3. **Event 2 is smarter than event 1.** Run event 1, save its record to localmem, then plan
-   event 2. The plan changes because of the record, for example "Lot 22 took only 30% of its cards,
+   event 2. The plan changes because of the record, for example "Lot 42 took only 30% of its cards,
    so we moved $8,000 to Lot 15". *Done when* the screen shows the change and the record it came
    from.
 
@@ -170,15 +172,13 @@ Coordinates are metres around the stadium centre (42.0909, -71.2643): x east, z 
 
 ## Team and tasks
 
-| Role | Owns |
+| Who | Owns |
 |---|---|
-| Lead, model and plan | Recommended vs today's plan in `sim.js`, take rates from records, score per $1,000 |
-| 3D and interface | Operator panel (conditions, budget, plan vs today), before/after playback, fly-in camera, cars |
-| Memory and backend | Server route to localmem: save each event record, read it before planning the next; deploy |
-| Data, story and ship | Real numbers with sources, demo script, recording, submission |
+| Vijay | Model and plan logic (`src/plan.js`, `src/sim.js`), data checks, demo, submission |
+| Maggie (`hello-magnolia`) | Operator screen: panel, results table, 3D playback, memory panel |
+| Sid (`siddhrajp`) | Events API, localmem, deploy |
 
-Working rules: small PRs to `main`, pull before you push, say in chat what you're taking, no keys
-in code.
+Tasks by hour and the shared data formats are in [PLAN.md](PLAN.md).
 
 ## Data and credits
 
