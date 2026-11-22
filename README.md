@@ -3,7 +3,7 @@
 A real 3D model of Gillette Stadium and Route 1 in Foxborough, MA. Built at Sundai Hack 150
 ("Building 3D worlds", MIT E38).
 
-**Team: start with [PLAN.md](PLAN.md)** for today's scope, goals, tasks and the shared data formats.
+**Team: start with [PLAN.md](PLAN.md)** for today's scope, goals, tasks and the shared data formats (also as a [PDF](docs/team-plan.pdf)).
 
 After a big game, cars sit in the Gillette lots for an hour or more. Route 1 is the only road in
 or out. We can't widen it, but we can change **where people spend the wait**: in the stadium, or
