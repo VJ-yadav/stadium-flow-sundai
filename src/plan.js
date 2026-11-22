@@ -53,7 +53,8 @@ export function crowd(net, c) {
   return { N, lot, dir, base, walk, groups };
 }
 
-const gameOpts = (c) => ({ lanesNorth: c.lanesNorth ?? 2, lanesSouth: c.lanesSouth ?? 2, contraflow: !!c.contraflow });
+// c.zipper is optional: how lots and Route 1 share a full merge (see ZIPPER in sim.js).
+const gameOpts = (c) => ({ lanesNorth: c.lanesNorth ?? 2, lanesSouth: c.lanesSouth ?? 2, contraflow: !!c.contraflow, ...(c.zipper != null && { zipper: +c.zipper }) });
 
 // Plays one game. held: Uint8Array, 1 = this car took a card and leaves at +75 min.
 export function play(net, cr, c, held, holdMin = HOLD_MIN) {

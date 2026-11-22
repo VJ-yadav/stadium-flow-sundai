@@ -4,6 +4,9 @@
 // run with whole cars so each car keeps its own clock. Each 40 m cell holds at most
 // lanes * JAM cars and passes at most lanes * CAP cars a step, so jams spill back.
 // Lots: each lot releases cars onto its join cell at LOT_RATE when the cell has room.
+// Merging: when a join cell is full, the cars already on Route 1 and the lots waiting to pull
+// out share the space that opens, in proportion to their capacities (the merge rule from
+// Daganzo 1995). See ZIPPER.
 // Every rate here is a stated estimate, to be replaced by counts from the venue.
 
 export const CELL_M = 40;          // cell length, metres
@@ -11,6 +14,11 @@ export const DT = 3;               // seconds per step (40 m at ~30 mph)
 export const CAP = 0.5 * DT;       // cars per lane per step (1,800 per lane per hour)
 export const JAM = 5;              // cars per lane per cell (about 8 m a car)
 export const LOT_RATE = 15 / 60 * DT; // cars per lot exit per step (15 a minute, estimate)
+// How a full join cell is shared between Route 1 and the lots pulling out. Estimate.
+// 0: cars already on Route 1 always go first, so a lot waits until the road behind it thins out.
+// 1: shared by capacity. A 15 a minute gate beside two lanes (60 a minute) gets 15 / 75 = 20%.
+// Override per game with opts.zipper.
+export const ZIPPER = 1;
 export const OPTIONS = [0, 15, 30, 45, 60, 75, 90]; // minutes after the game a car can leave
 export const DELAYED_OPT = 5;      // the delayed-release lots leave at +75 min
 
@@ -71,6 +79,12 @@ export class Game {
     // cars a lot releases per step: its own rate if known (cars a minute), else the estimate
     this.lotRate = Float32Array.from(net.lots, (l) => (l.rate ? l.rate / 60 * DT : LOT_RATE));
     this.flowTok = [new Float32Array(nc + 1), new Float32Array(nc + 1)];
+    this.zipper = opts.zipper ?? ZIPPER;
+    // per direction and join cell: cars the lots can release this step, the gate capacity of
+    // those lots, and the space still owed to them
+    this.want = [new Uint16Array(nc), new Uint16Array(nc)];
+    this.wantRate = [new Float32Array(nc), new Float32Array(nc)];
+    this.mergeTok = [new Float32Array(nc), new Float32Array(nc)];
     this.order = Array.from({ length: N }, (_, i) => i).sort((a, b) => cars.dep[a] - cars.dep[b]);
     this.next = 0;
     this.state = new Uint8Array(N);   // 0 parked, 1 waiting in lot, 2 on Route 1, 3 gone
@@ -87,9 +101,19 @@ export class Game {
       const i = this.order[this.next++];
       this.state[i] = 1; this.lotQ[cars.lot[i]].push(i);
     }
+    // lots: top up each gate, then note which lots have cars ready to pull out, and which way
+    const zip = this.zipper, want = this.want, wantRate = this.wantRate;
+    if (zip > 0) for (let d = 0; d < 2; d++) { want[d].fill(0); wantRate[d].fill(0); }
+    for (let l = 0; l < this.lotQ.length; l++) {
+      const q = this.lotQ[l], r = this.lotRate[l]; this.lotTok[l] = Math.min(this.lotTok[l] + r, r + 1);
+      if (!q.length || !(zip > 0)) continue;
+      const c = net.lots[l].cell, d = cars.dir[q[0]], n = Math.min(q.length, Math.floor(this.lotTok[l]));
+      let j = 0; while (j < n && cars.dir[q[j]] === d) j++;
+      want[d][c] += j; wantRate[d][c] += r;
+    }
     for (let d = 0; d < 2; d++) {
       const cells = this.cell[d], L = this.lanes[d], nc = cells.length, tok = this.flowTok[d];
-      const cap = CAP * L, jam = JAM * L;
+      const cap = CAP * L, jam = JAM * L, owedTo = this.mergeTok[d];
       // Boundary k sits downstream of the k-th cell in travel order (direction 0 runs up the
       // index, 1 down). Going downstream first, a cell has already released its own cars when
       // the cell behind it moves in, and it has not yet received any, so a car moves at most
@@ -97,7 +121,19 @@ export class Game {
       for (let k = nc - 1; k >= 0; k--) {
         const from = d === 0 ? k : nc - 1 - k, to = d === 0 ? from + 1 : from - 1;
         tok[k] = Math.min(tok[k] + cap, cap + 1);
-        const room = to < 0 || to >= nc ? Infinity : jam - cells[to].length;
+        let room = to < 0 || to >= nc ? Infinity : jam - cells[to].length;
+        if (zip > 0 && room !== Infinity) {
+          // Zipper merge: lots queued at this cell are owed a share of the space it can take
+          // this step. Hold back that many spaces from the road when the lots can use them now;
+          // they fill them in the lot loop below. Space the lots cannot use stays with the road.
+          const gates = wantRate[d][to];
+          if (gates > 0) {
+            const share = Math.min(1, zip * gates / (gates + cap));
+            const owed = Math.min(owedTo[to] + share * Math.min(room, cap), share * cap + 1);
+            const hold = Math.min(want[d][to], Math.floor(owed), room);
+            owedTo[to] = owed - hold; room -= hold;
+          } else owedTo[to] = 0;
+        }
         const m = Math.max(0, Math.min(cells[from].length, Math.floor(tok[k]), room));
         if (!m) continue;
         tok[k] -= m;
@@ -108,7 +144,7 @@ export class Game {
     }
     // lots release onto their join cell when there is room
     for (let l = 0; l < this.lotQ.length; l++) {
-      const q = this.lotQ[l], r = this.lotRate[l]; this.lotTok[l] = Math.min(this.lotTok[l] + r, r + 1);
+      const q = this.lotQ[l];
       if (!q.length) continue;
       const c = net.lots[l].cell;
       while (q.length && this.lotTok[l] >= 1) {

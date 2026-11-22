@@ -1,11 +1,15 @@
 // Headless check of the operator plan: event 1 with no memory, save its record, plan event 2.
-// node scripts/check_plan.mjs [--sample]   (--sample writes public/data/plan.sample.json)
+// node scripts/check_plan.mjs [--sample] [--zipper=0]
+//   --sample writes public/data/plan.sample.json
+//   --zipper=0 gives Route 1 traffic the whole merge (the rule before the zipper merge); default 1
 import fs from 'node:fs';
 import { buildNet, planEvent, runEvent } from '../src/plan.js';
 
 const data = JSON.parse(fs.readFileSync(new URL('../public/data/foxborough.json', import.meta.url)));
 const net = buildNet(data);
 const c = { cars: 14000, trains: 3000, contraflow: false, budget: 50000 };
+const zip = process.argv.find((a) => a.startsWith('--zipper='));
+if (zip) { c.zipper = +zip.split('=')[1]; console.log('zipper', c.zipper); }
 
 const row = (p) => `${p.kind.padEnd(5)} avg ${String(p.result.avgInCarMin).padStart(5)} min | last out ${p.result.lastOutMin} min | saved ${p.result.carMinSaved.toLocaleString('en-US').padStart(7)} car-min | spent $${p.result.spent.toLocaleString('en-US')} | ${p.result.perThousand.toLocaleString('en-US')} per $1,000`;
 const lots = (p) => Object.entries(p.cards).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([n, k]) => `${n} ${k}`).join(', ');

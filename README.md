@@ -62,6 +62,9 @@ gate), and the next plan uses it.
   model (lots, roads, rail, buildings, the stadium).
 - A traffic model of the real 7.3 km of Route 1 (`src/sim.js`): a cell transmission model
   (Daganzo 1994) with whole cars, 40 m cells and 3 s steps, so jams spill back into the lots.
+- A zipper merge at every lot exit: when the road beside a gate is full, the lot and the cars
+  already on Route 1 share the space that opens, in proportion to their capacities (`ZIPPER` in
+  `src/sim.js`). Set it to 0 and cars on Route 1 always go first, which was the rule before.
 - Sliders: cars parked, fans on trains, north/south split, northbound lanes, contraflow, the
   delayed-release lot and the time-lapse speed.
 - A game log: each run is one event the operator would remember.
@@ -71,13 +74,27 @@ gate), and the next plan uses it.
 
 | Scenario | Avg minutes in car | Last car out of the lots |
 |---|---|---|
-| 14,000 cars, 2 lanes north | 51 | 175 min |
+| 14,000 cars, 2 lanes north | 50 | 185 min |
 | Same, plus contraflow lane | 29 | 136 min |
-| 14,000 cars, 1 lane north | 120 | 305 min |
-| 8,000 cars, 2 lanes north | 22 | 113 min |
+| 14,000 cars, 1 lane north | 119 | 309 min |
+| 8,000 cars, 2 lanes north | 20 | 113 min |
+
+The merge rule decides which lots wait, more than how long everyone waits in total. Average
+minutes waiting in the lot, 14,000 cars and 2 lanes north (run either script with `--zipper=0`
+to compare):
+
+| Lots by where they join Route 1 | Route 1 first (`ZIPPER = 0`) | Zipper merge (`ZIPPER = 1`) |
+|---|---|---|
+| Southern lots (5,462 cars) | 13 | 75 |
+| Middle lots (4,569 cars) | 47 | 36 |
+| Northern lots, nearest I-95 (3,969 cars) | 99 | 13 |
+
+Real merges sit somewhere between the two. Around `ZIPPER = 0.25` the three groups wait about
+the same. This needs counts from the venue like every other rate here.
 
 All rates are estimates until the venue provides counts: 1,800 cars per lane per hour, 15 cars a
-minute per lot exit, 30 m² a car for lot capacity, 60% heading north.
+minute per lot exit, 30 m² a car for lot capacity, 60% heading north, and a full merge shared by
+capacity (a 15 a minute gate beside two lanes gets 20% of the space).
 
 ## Run it
 
