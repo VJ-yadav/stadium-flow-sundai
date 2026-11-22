@@ -105,8 +105,9 @@ is finally gone barely moves** (on average about 2 minutes sooner with our lots)
 Who benefits:
 - **Every driver:** less time stuck in traffic.
 - **The town:** shorter queues on Route 1 and fewer rideshares cutting through side streets.
-- **The stadium:** the same $50,000 buys more than three times the result of today's lot, and
-  Patriot Place keeps card holders for an extra hour.
+- **The stadium:** each dollar saves about 50% more driving time than today's lot, and the whole
+  budget can be used (today's one lot only fills about 310 cards). Patriot Place keeps card
+  holders for an extra hour.
 
 ## When should the card lots open? (Not always 75 minutes)
 
