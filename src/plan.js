@@ -57,7 +57,8 @@ export function crowd(net, c) {
   return { N, lot, dir, base, walk, sizes };
 }
 
-const gameOpts = (c) => ({ lanesNorth: c.lanesNorth ?? 2, lanesSouth: c.lanesSouth ?? 2, contraflow: !!c.contraflow });
+// c.zipper is optional: how lots and Route 1 share a full merge (see ZIPPER in sim.js).
+const gameOpts = (c) => ({ lanesNorth: c.lanesNorth ?? 2, lanesSouth: c.lanesSouth ?? 2, contraflow: !!c.contraflow, ...(c.zipper != null && { zipper: +c.zipper }) });
 
 // Leaving times when the lots in `delayed` (a Set of lot indexes) open at openMin.
 function departures(cr, delayed, openMin) {
@@ -138,8 +139,12 @@ export function beliefs(net, records = []) {
   });
 }
 
-// The operator's headline first: minutes Route 1 is jammed, then blocked gates, then idling.
-const score = (m) => m.jamMin * 1000 + m.blockedGateMin + m.idleH / 100;
+// What the operator wants less of, each as a share of the night with no delayed lots, weighted
+// equally: minutes Route 1 is jammed, gate-minutes blocked, engine-idling hours. Shares, so no
+// one number swamps the others whatever the merge rule (with a full zipper merge the jam
+// barely moves, but blocked gates and idling still do).
+const share = (x, b) => x / Math.max(1, b);
+const score = (m, base) => share(m.jamMin, base.jamMin) + share(m.blockedGateMin, base.blockedGateMin) + share(m.idleH, base.idleH);
 
 // Lots chosen one at a time: each step adds the lot that cuts the score most per dollar, tried
 // together with the lots already chosen (lots interact: two lots on the same stretch of
@@ -150,7 +155,7 @@ function recommend(net, cr, c, openMin, base, onProgress) {
   const key = JSON.stringify([cr.N, c.shareNorth ?? 0.6, gameOpts(c), openMin, c.budget, net.lots.map((l) => l.rate)]);
   if (recCache.has(key)) return new Set(recCache.get(key));
   const cand = net.lots.map((l, i) => i).filter((i) => cr.sizes[i] >= MIN_LOT_CARS);
-  const set = new Set(); let left = c.budget, cur = score(base), evals = 0;
+  const set = new Set(); let left = c.budget, cur = score(base, base), evals = 0;
   const guess = cand.length * 8;
   for (;;) {
     let best = null;
@@ -158,7 +163,7 @@ function recommend(net, cr, c, openMin, base, onProgress) {
       const cost = cr.sizes[i] * CARD_USD;
       if (set.has(i) || cost > left) continue;
       const s = new Set(set); s.add(i);
-      const sc = score(measure(net, cr, c, s, openMin).m), gain = (cur - sc) / cost;
+      const sc = score(measure(net, cr, c, s, openMin).m, base), gain = (cur - sc) / cost;
       if (sc < cur && (!best || gain > best.gain)) best = { i, sc, gain };
       onProgress?.(Math.min(++evals, guess), guess);
     }
@@ -168,7 +173,7 @@ function recommend(net, cr, c, openMin, base, onProgress) {
   recCache.set(key, [...set]);
   return set;
 }
-const better = (a, b) => score(a) < score(b);
+const better = (a, b, base) => score(a, base) < score(b, base);
 
 function vsBase(m, base) {
   const idleSavedH = base.idleH - m.idleH;
@@ -189,7 +194,7 @@ export function planEvent(net0, c, records = [], onProgress, picked = null) {
   const today = mk('today', indexes(net, TODAY_LOTS), HOLD_MIN);
   let rec = recommend(net, cr, c, openMin, base, (i, n) => onProgress?.(n / 5 + i, n + n / 5)), fallback = false;
   let ours = mk('ours', picked ? indexes(net, picked) : rec, openMin);
-  if (!picked && better(today.result, ours.result)) { rec = indexes(net, TODAY_LOTS); ours = mk('ours', rec, openMin); fallback = true; }
+  if (!picked && better(today.result, ours.result, base)) { rec = indexes(net, TODAY_LOTS); ours = mk('ours', rec, openMin); fallback = true; }
   ours.own = !!picked;
   const releaseTest = testRelease(net, cr, c, base, indexes(net, ours.lots));
   const whyLines = why(net0, records, bel, rec, values);

@@ -6,6 +6,8 @@ import { buildNet, planEvent, runEvent } from '../src/plan.js';
 const data = JSON.parse(fs.readFileSync(new URL('../public/data/foxborough.json', import.meta.url)));
 const net = buildNet(data);
 const c = { cars: +(process.argv[2] || 14000), trains: 3000, contraflow: process.argv[3] === 'cf', budget: 50000, releaseMin: 75 };
+const zip = process.argv.find((a) => a.startsWith('--zipper='));
+c.zipper = zip ? +zip.split('=')[1] : 0.25;   // default: mostly Route 1 first (see ZIPPER in sim.js)
 const f = (x) => Math.round(x).toLocaleString('en-US');
 const row = (name, m) => console.log(`  ${name.padEnd(8)} lots ${String(m.lots).padStart(2)} cars ${f(m.held).padStart(5)} $${f(m.spent).padStart(6)} | jammed ${m.jamMin} min | worst ${f(m.peakStuck)} stuck at ${m.peakAt} min | blocked gate-min ${m.blockedGateMin} | idling ${f(m.idleH)} h (saved ${f(m.idleSavedH ?? 0)}) | in car ${m.avgInCarMin} | home ${m.avgHomeMin}`);
 
