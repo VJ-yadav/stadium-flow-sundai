@@ -5,18 +5,18 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { TilesRenderer } from '3d-tiles-renderer';
 import { GoogleCloudAuthPlugin } from '3d-tiles-renderer/core/plugins';
 import { GLTFExtensionsPlugin, ReorientationPlugin, TileCompressionPlugin } from '3d-tiles-renderer/three/plugins';
-import { buildCells, nearestCell, Game, Season, CELL_M } from './sim.js';
+import { Game, JAM, CELL_M } from './sim.js';
+import { buildNet, crowd, realNet, TODAY_LOTS, CARD_USD } from './plan.js';
+import { listEvents, saveEvent, clearEvents, exportEvents } from './memory.js';
 
 const KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY;
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
-const RIDERS_PER_CAR = 5000 / 1200; // Foxborough police: a 5,000-rider train keeps ~1,200 cars off Route 1
 
 const data = await (await fetch('/data/foxborough.json')).json();
-const { cells } = buildCells(data.route1);
-const lots = data.lots.map((l) => ({ ...l, cell: nearestCell(cells, l.c[0], l.c[1]), delayed: false }));
-const DELAYED_LOT = lots.findIndex((l) => l.name === 'Lot 55');
-const net = { cells, lots };
+const net = buildNet(data);
+const { cells, lots } = net;
+const TODAY = lots.map((l) => TODAY_LOTS.includes(l.name));
 
 // ---------- scene ----------
 const app = $('app');
@@ -29,9 +29,9 @@ app.appendChild(labels.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color('#9fb3c4');
 const camera = new THREE.PerspectiveCamera(45, 1, 1, 60000);
-camera.position.set(-900, 1500, 1900);
+camera.position.set(-1350, 1000, 1250);
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 0, -300);
+controls.target.set(-250, 0, -250);
 controls.maxPolarAngle = Math.PI * 0.44;   // never tilt to or below the horizon
 controls.screenSpacePanning = false;        // pan along the ground, not up and down
 controls.minDistance = 80; controls.maxDistance = 6000;
@@ -42,7 +42,7 @@ let underCam = null, sinceUnder = 0;
 function keepAboveGround(dt) {
   const t = controls.target, g = groundY;
   t.x = THREE.MathUtils.clamp(t.x, -3000, 3000); t.z = THREE.MathUtils.clamp(t.z, -4500, 3000);
-  const dy = g - t.y; t.y = g; camera.position.y += dy;          // keep the view when the ground height arrives
+  const dy = g - t.y; t.y = g; camera.position.y += dy;
   if (tiles && (sinceUnder += dt) > 0.25) { sinceUnder = 0; underCam = sample(camera.position.x, camera.position.z); }
   const floor = Math.max(g, underCam ?? g) + 30;
   if (camera.position.y < floor) camera.position.y = floor;
@@ -51,7 +51,7 @@ scene.add(new THREE.HemisphereLight('#ffffff', '#4a5560', 1.4));
 const sun = new THREE.DirectionalLight('#ffffff', 1.6); sun.position.set(-1000, 2000, 800); scene.add(sun);
 
 const osm = new THREE.Group(); scene.add(osm);        // shown only without Google tiles
-const overlay = new THREE.Group(); scene.add(overlay); // lots, Route 1, cars: always shown
+const overlay = new THREE.Group(); scene.add(overlay); // lots, Route 1, columns: always shown
 
 function shapeOf(pts) { const s = new THREE.Shape(); pts.forEach(([x, z], i) => (i ? s.lineTo(x, -z) : s.moveTo(x, -z))); return s; }
 function flat(pts, color, y, opacity = 1) {
@@ -90,14 +90,9 @@ if (data.stadium) {
   osm.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: '#c9ccd1' })));
 }
 
-// overlay: lots, Route 1 and labels
-const lotGroup = new THREE.Group(); overlay.add(lotGroup);
-lots.forEach((l, i) => {
-  lotGroup.add(flat(l.p, i === DELAYED_LOT ? '#7a5a1a' : '#2b3136', 0.5, KEY ? 0.35 : 1));
-  lotGroup.add(line(l.p, '#f4f6f2', 1, 0.5));
-  if (l.name && l.capEst > 250) l.label = label(l.name.replace('Parking ', ''), l.c[0], 25, l.c[1], i === DELAYED_LOT ? 'delayed' : '');
-});
-const r1 = ribbon(data.route1, 20, '#f2a516', 1.2, 0.18); overlay.add(r1);
+// lot outlines and Route 1
+const lotFill = lots.map((l, i) => { const m = flat(l.p, TODAY[i] ? '#7a5a1a' : '#2b3136', 0.5, KEY ? 0.3 : 1); overlay.add(m); overlay.add(line(l.p, '#f4f6f2', 1, 0.45)); return m; });
+overlay.add(ribbon(data.route1, 20, '#f2a516', 1.2, 0.12));
 const north = cells.at(-1), south = cells[0];
 label('Gillette Stadium', 0, 80, 0, 'big');
 label('Route 1 north · to I-95', north.x, 40, north.z, 'big');
@@ -120,17 +115,15 @@ if (KEY) {
   scene.add(tiles.group);
   osm.visible = false;
   tiles.addEventListener('load-error', (e) => {
-    // Fall back to the OSM model so the map never goes blank.
     osm.visible = true; tiles.group.visible = false;
-    $('mode').textContent = 'Google tiles failed to load, so this is the OpenStreetMap model. Check that Map Tiles API is enabled for the key and that the key allows localhost:5173.';
+    $('mode').textContent = 'Google tiles failed to load, so this is the OpenStreetMap model.';
     console.warn(e);
   });
-  $('mode').textContent = 'Google Photorealistic 3D Tiles with OpenStreetMap lots and roads.';
+  $('mode').textContent = 'Real 3D Gillette (Google) with OpenStreetMap lots and Route 1.';
 } else {
-  $('mode').textContent = 'OpenStreetMap model. Add VITE_GOOGLE_MAPS_KEY to .env.local for the photoreal view.';
+  $('mode').textContent = 'OpenStreetMap model of Gillette, its lots and Route 1.';
 }
 
-// Ground height under the overlay, sampled from the tiles where they exist.
 const ray = new THREE.Raycaster(); const DOWN = new THREE.Vector3(0, -1, 0);
 const cellY = new Float32Array(cells.length), lotY = new Float32Array(lots.length);
 let groundY = 0;
@@ -142,90 +135,182 @@ function resampleHeights() {
   cells.forEach((c, i) => { const y = sample(c.x, c.z); cellY[i] = (y ?? g) - g; });
   lots.forEach((l, i) => { const y = sample(l.c[0], l.c[1]); lotY[i] = (y ?? g) - g; });
   overlay.position.y = g;
-  lotGroup.children.forEach((m) => { /* flat lot shapes follow the stadium ground; small slopes hidden by opacity */ });
 }
 
-// ---------- cars ----------
-const MAXN = 18000;
-const carMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(2.4, 1.8, 5), new THREE.MeshLambertMaterial(), MAXN);
-carMesh.frustumCulled = false; overlay.add(carMesh);
-const C = { park: new THREE.Color('#69747e'), wait: new THREE.Color('#f2a516'), road: new THREE.Color('#34c6a8') };
-for (let i = 0; i < MAXN; i++) carMesh.setColorAt(i, C.park);
-const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), P = new THREE.Vector3(), S1 = new THREE.Vector3(1, 1, 1), S0 = new THREE.Vector3(0, 0, 0), UP = new THREE.Vector3(0, 1, 0);
+// ---------- the 3D layers: what is going wrong, and where ----------
+// 1. Each lot is a tank: a column as tall as the cars still in it, stacked
+//    amber (trying to leave) / blue (card holders staying) / grey (not left the stadium yet).
+const PER_CAR_M = 0.2;
+const colGeo = new THREE.BoxGeometry(1, 1, 1); colGeo.translate(0, 0.5, 0);
+const colMesh = new THREE.InstancedMesh(colGeo, new THREE.MeshLambertMaterial(), lots.length * 3);
+colMesh.frustumCulled = false; overlay.add(colMesh);
+const SEG = [new THREE.Color('#f2a516'), new THREE.Color('#5aa9ff'), new THREE.Color('#6b7680')];
+const colW = lots.map((l) => THREE.MathUtils.clamp(Math.sqrt(l.capEst) * 1.1, 18, 48));
 
-// parking spots: a 3 m x 10 m grid inside each lot polygon (30 m2 a car, as in the estimate)
-function inside(pts, x, z) { let c = false; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) { const [xi, zi] = pts[i], [xj, zj] = pts[j]; if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) c = !c; } return c; }
-const spots = lots.map((l) => {
-  let minx = Infinity, maxx = -Infinity, minz = Infinity, maxz = -Infinity;
-  for (const [x, z] of l.p) { minx = Math.min(minx, x); maxx = Math.max(maxx, x); minz = Math.min(minz, z); maxz = Math.max(maxz, z); }
-  const out = []; for (let z = minz + 5; z < maxz; z += 10) for (let x = minx + 1.5; x < maxx; x += 3) if (inside(l.p, x, z)) out.push([x, z]);
-  return out.length ? out : [l.c];
-});
+// 2. Route 1 as a queue: a bar per 40 m stretch and direction, taller and redder when packed.
+const roadGeo = new THREE.BoxGeometry(1, 1, 1); roadGeo.translate(0, 0.5, 0);
+const roadMesh = new THREE.InstancedMesh(roadGeo, new THREE.MeshLambertMaterial(), cells.length * 2);
+roadMesh.frustumCulled = false; overlay.add(roadMesh);
+const FREE = new THREE.Color('#34c6a8'), BUSY = new THREE.Color('#f2a516'), FULL = new THREE.Color('#ff4d4d'), tmpC = new THREE.Color();
 
-let season = null, game = null, running = false, paused = false, simAcc = 0;
-function opts() {
-  return { lanesNorth: +$('lanes').value, lanesSouth: 2, contraflow: $('contra').checked, shareNorth: +$('north').value / 100, trust: 0.6 };
-}
-function effectiveCars() { return Math.max(0, +$('cars').value - Math.round(+$('train').value / RIDERS_PER_CAR)); }
+// 3. The broken part: a red ring where a lot's gate can't let cars out because Route 1 is full,
+//    and a red line from the lot to the spot on Route 1 that blocks it.
+const ringMesh = new THREE.InstancedMesh(new THREE.TorusGeometry(1, 0.16, 8, 40).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#ff4d4d' }), lots.length);
+ringMesh.frustumCulled = false; overlay.add(ringMesh);
+const linkPos = new Float32Array(lots.length * 6);
+const linkGeo = new THREE.BufferGeometry(); linkGeo.setAttribute('position', new THREE.BufferAttribute(linkPos, 3));
+const links = new THREE.LineSegments(linkGeo, new THREE.LineBasicMaterial({ color: '#ff4d4d' })); links.frustumCulled = false; overlay.add(links);
 
-function startGame() {
-  lots.forEach((l, i) => (l.delayed = $('delayed').checked && i === DELAYED_LOT));
-  const N = effectiveCars(), o = opts();
-  season = new Season(net, { cars: N, shareNorth: o.shareNorth, trust: o.trust });
-  const d = season.departures(season.habit, 1001);
-  game = new Game(net, { lot: season.lot, dir: season.dir, dep: d.dep }, o);
-  carMesh.count = N; running = true; paused = false; simAcc = 0;
+const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), P = new THREE.Vector3(), S = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
+const HIDE = new THREE.Matrix4().makeScale(0, 0, 0);
+
+// ---------- replay state ----------
+let conditions = null, lastPlan = null, runs = null, view = 'ours';
+let game = null, held = null, cr = null, running = false, paused = false, simAcc = 0;
+let cardLabels = [];
+const gameOpts = (c) => ({ lanesNorth: 2, lanesSouth: 2, contraflow: !!c.contraflow });
+const REAL = realNet(net);
+
+function startReplay(kind) {
+  if (!runs) return;
+  view = kind;
+  const r = runs[kind];
+  cr = crowd(net, conditions);
+  game = new Game(REAL, { lot: cr.lot, dir: cr.dir, dep: r.dep }, gameOpts(conditions));
+  held = r.held; running = true; paused = false; simAcc = 0;
   $('pause').textContent = 'Pause';
-  $('status').textContent = `Running: ${fmt(N)} cars after ${fmt(+$('cars').value - N)} fewer from trains.`;
+  document.querySelectorAll('.seg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.kind === kind)));
+  $('hTitle').textContent = { none: 'No cards', today: "Today's lot (Lot 55)", ours: 'Our lots' }[kind] + (kind === 'none' ? '' : ` · card lots open at ${r.record.plan.releaseMin} min`);
+  // label the lots that got cards in this plan
+  cardLabels.forEach((o) => overlay.remove(o)); cardLabels = [];
+  const cards = r.record.plan.cards || {};
+  Object.entries(cards).sort((a, b) => b[1] - a[1]).slice(0, 8).forEach(([name, n]) => {
+    const i = lots.findIndex((l) => l.name === name); if (i < 0) return;
+    cardLabels.push(label(`${name.replace('Parking ', '')} · ${fmt(n)} cards`, lots[i].c[0], 30, lots[i].c[1], 'card'));
+  });
 }
 
-function drawCars() {
-  if (!game) return;
-  const N = game.N; let inLots = 0, onRoad = 0;
-  const lanes = game.lanes;
-  for (let i = 0; i < N; i++) {
-    const st = game.state[i];
-    if (st === 3) { M.compose(P.set(0, -50, 0), Q.identity(), S0); carMesh.setMatrixAt(i, M); continue; }
-    if (st < 2) {
-      const l = season.lot[i], sp = spots[l][season.slot[i] % spots[l].length];
-      M.compose(P.set(sp[0], 1.4 + lotY[l], sp[1]), Q.identity(), S1); carMesh.setMatrixAt(i, M);
-      carMesh.setColorAt(i, st === 0 ? C.park : C.wait); inLots++;
-    }
+function drawLayers() {
+  if (!game) { colMesh.count = 0; roadMesh.count = 0; ringMesh.count = 0; return; }
+  colMesh.count = lots.length * 3; roadMesh.count = cells.length * 2; ringMesh.count = lots.length;
+  const counts = lots.map(() => [0, 0, 0]);
+  const dep = game.cars.dep;
+  for (let i = 0; i < game.N; i++) {
+    const st = game.state[i]; if (st >= 2) continue;
+    const l = cr.lot[i];
+    if (st === 1) counts[l][0]++;
+    else if (held[i] && game.t > (cr.base[i] - 1)) counts[l][1]++;   // past when it would have left: staying for the card
+    else counts[l][2]++;
   }
+  let inLots = 0, onRoad = 0, blocked = 0;
+  lots.forEach((lot, l) => {
+    let y = 0.6 + lotY[l];
+    for (let s = 0; s < 3; s++) {
+      const h = counts[l][s] * PER_CAR_M; inLots += counts[l][s];
+      if (h <= 0.01) { colMesh.setMatrixAt(l * 3 + s, HIDE); continue; }
+      M.compose(P.set(lot.c[0], y, lot.c[1]), Q.identity(), S.set(colW[l], h, colW[l]));
+      colMesh.setMatrixAt(l * 3 + s, M); colMesh.setColorAt(l * 3 + s, SEG[s]); y += h;
+    }
+    // blocked gate: cars queued at the gate and the Route 1 stretch it joins is full
+    const c = lot.cell, waiting = game.lotQ[l].length > 0;
+    const first = game.lotQ[l][0], full = waiting && game.cell[cr.dir[first]][c].length >= JAM * game.lanes[cr.dir[first]];
+    if (full) {
+      blocked++;
+      M.compose(P.set(lot.c[0], 2 + lotY[l], lot.c[1]), Q.identity(), S.setScalar(colW[l] * 0.9 + 10)); ringMesh.setMatrixAt(l, M);
+      linkPos.set([lot.c[0], 3 + lotY[l], lot.c[1], cells[c].x, 3 + cellY[c], cells[c].z], l * 6);
+    } else { ringMesh.setMatrixAt(l, HIDE); linkPos.fill(0, l * 6, l * 6 + 6); }
+  });
   for (let d = 0; d < 2; d++) {
-    const L = lanes[d];
+    const jam = JAM * game.lanes[d];
     game.cell[d].forEach((list, ci) => {
-      const c = cells[ci], hx = d === 0 ? c.ux : -c.ux, hz = d === 0 ? c.uz : -c.uz, rx = -hz, rz = hx;
-      Q.setFromAxisAngle(UP, Math.atan2(hx, hz));
-      for (let k = 0; k < list.length; k++) {
-        const i = list[k], lane = k % L, row = Math.floor(k / L);
-        const along = CELL_M / 2 - (row + 0.5) * (CELL_M / Math.max(1, Math.ceil(list.length / L))) ;
-        const lat = 2.5 + lane * 3.6;
-        P.set(c.x + hx * along + rx * lat, 1.4 + cellY[ci], c.z + hz * along + rz * lat);
-        M.compose(P, Q, S1); carMesh.setMatrixAt(i, M); carMesh.setColorAt(i, C.road); onRoad++;
-      }
+      const n = list.length, k = d * cells.length + ci; onRoad += n;
+      if (!n) { roadMesh.setMatrixAt(k, HIDE); return; }
+      const c = cells[ci], f = Math.min(1, n / jam), side = d === 0 ? 10 : -10;
+      Q.setFromAxisAngle(UP, Math.atan2(c.ux, c.uz));
+      M.compose(P.set(c.x - c.uz * side, 1 + cellY[ci], c.z + c.ux * side), Q, S.set(14, 6 + f * 110, CELL_M * 0.96));
+      roadMesh.setMatrixAt(k, M);
+      tmpC.copy(f < 0.5 ? FREE : BUSY).lerp(f < 0.5 ? BUSY : FULL, f < 0.5 ? f * 2 : (f - 0.5) * 2);
+      roadMesh.setColorAt(k, tmpC);
     });
   }
-  carMesh.instanceMatrix.needsUpdate = true; carMesh.instanceColor.needsUpdate = true;
+  colMesh.instanceMatrix.needsUpdate = true; if (colMesh.instanceColor) colMesh.instanceColor.needsUpdate = true;
+  roadMesh.instanceMatrix.needsUpdate = true; if (roadMesh.instanceColor) roadMesh.instanceColor.needsUpdate = true;
+  ringMesh.instanceMatrix.needsUpdate = true; linkGeo.attributes.position.needsUpdate = true;
   $('hClock').textContent = Math.round(game.t / 60) + ' min';
-  $('hLots').textContent = fmt(inLots); $('hRoad').textContent = fmt(onRoad); $('hGone').textContent = fmt(game.gone);
+  $('hLots').textContent = fmt(inLots); $('hRoad').textContent = fmt(onRoad); $('hGone').textContent = fmt(game.gone); $('hBlocked').textContent = blocked;
 }
 
-function finishGame() {
-  running = false;
-  const s = game.summary(), o = opts();
-  const li = document.createElement('li');
-  const plan = `${fmt(game.N)} cars, ${o.lanesNorth}${o.contraflow ? '+1 contraflow' : ''} lanes north, ${$('train').value} on trains, ${$('north').value}% north${$('delayed').checked ? ', delayed lot on' : ''}`;
-  li.innerHTML = `<strong>${Math.round(s.avgInCarMin)} min</strong> in the car on average, lots empty after <strong>${Math.round(s.lastOutMin)} min</strong><br><span>${plan}</span>`;
-  $('log').prepend(li);
-  $('status').textContent = 'Game finished. Change the plan and run again to compare.';
+// ---------- planning (in a worker so the map keeps moving) ----------
+const worker = new Worker(new URL('./planWorker.js', import.meta.url), { type: 'module' });
+worker.postMessage({ data });
+worker.onmessage = (e) => {
+  const m = e.data;
+  if (m.type === 'progress') { $('progress').style.width = Math.round(m.i / m.n * 100) + '%'; return; }
+  if (m.type !== 'plan') return;
+  lastPlan = m.plan; runs = m.runs;
+  $('progress').style.width = '100%';
+  $('plan').disabled = false; $('plan').textContent = 'Plan this game';
+  $('status').textContent = `Planned for ${fmt(lastPlan.cars)} cars, using ${listEvents().length} past game(s). Numbers below are what actually happened when each plan was played.`;
+  showResult(); startReplay('ours');
+};
+
+function conditionsFromForm() {
+  return { cars: +$('cars').value, trains: +$('train').value, contraflow: $('contra').checked, budget: +$('budget').value, releaseMin: +$('release').value };
+}
+function plan() {
+  conditions = conditionsFromForm();
+  $('plan').disabled = true; $('plan').textContent = 'Planning…'; $('progress').style.width = '0';
+  $('status').textContent = 'Testing every lot: what if 100 of its cars stayed? This takes a few seconds.';
+  const id = `${new Date().toISOString().slice(0, 10)}-g${listEvents().length + 1}`;
+  worker.postMessage({ type: 'plan', c: conditions, records: listEvents(), id });
+}
+
+function showResult() {
+  const R = { none: runs.none.record.result, today: runs.today.record.result, ours: runs.ours.record.result };
+  const row = (name, f, key = false) => `<tr${key ? ' class="key"' : ''}><td>${name}</td><td>${f(R.none, 'none')}</td><td>${f(R.today, 'today')}</td><td class="ours">${f(R.ours, 'ours')}</td></tr>`;
+  const dash = (k, v) => (k === 'none' ? '–' : v);
+  $('rows').innerHTML = [
+    row('Avg time sitting in the car', (r) => Math.round(r.avgInCarMin) + ' min'),
+    row('Avg time from whistle to highway', (r) => Math.round(r.avgHomeMin) + ' min'),
+    row('Cards taken', (r, k) => dash(k, fmt(r.spent / CARD_USD))),
+    row('Money spent', (r, k) => dash(k, '$' + fmt(r.spent))),
+    row('Car time saved', (r, k) => dash(k, fmt(r.carMinSaved / 60) + ' h')),
+    row('Saved per $1,000', (r, k) => dash(k, fmt(r.perThousand) + ' min'), true),
+  ].join('');
+  const top = Object.entries(lastPlan.ours.cards).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([n, k]) => `${n} (${k})`).join(', ');
+  $('lotsLine').textContent = `Our cards go to northbound drivers in: ${top}${Object.keys(lastPlan.ours.cards).length > 5 ? ', and more' : ''}. They join Route 1 where the queue is worst.`;
+  const rt = lastPlan.releaseTest, at = (min) => rt.rows.find((r) => r.min === min);
+  const chosen = conditions.releaseMin, adv = at(rt.pick), cur = at(chosen);
+  $('advice').textContent = rt.pick === chosen
+    ? `Opening the card lots at ${chosen} min fits this game: opening later saves little more.`
+    : rt.pick < chosen
+      ? `For this game the road clears sooner: opening at ${rt.pick} min gets ${Math.round(adv.carMinSaved / cur.carMinSaved * 100)}% of the benefit and card holders get home ${chosen - rt.pick} min earlier.`
+      : `For this game Route 1 is still jammed at ${chosen} min, so card holders drive into it. Opening at ${rt.pick} min saves about ${Math.round((adv.carMinSaved / cur.carMinSaved - 1) * 100)}% more.`;
+  $('why').innerHTML = lastPlan.why.map((w) => `<li>${w}</li>`).join('');
+  $('resultBox').hidden = false; $('replayBox').hidden = false; $('saveBox').hidden = false; $('save').disabled = false; $('save').textContent = 'Save this game';
+}
+
+function renderHistory() {
+  const ev = listEvents();
+  $('history').innerHTML = ev.length ? ev.map((r) => `<li><strong>${r.id}</strong>: ${fmt(r.conditions.cars)} cars, ${r.conditions.contraflow ? 'contraflow, ' : ''}$${fmt(r.plan.budget)} of cards<br><span>${Math.round(r.result.avgInCarMin)} min in the car on average, ${fmt(r.result.perThousand)} min saved per $1,000; gate speeds counted in ${Object.keys(r.result.exitPerMin || {}).length} lots</span></li>`).join('') : '<li><span>None yet. Plan a game, then save it.</span></li>';
 }
 
 // ---------- UI ----------
-const outs = { cars: (v) => fmt(v), train: (v) => fmt(v), north: (v) => v + '%', lanes: (v) => v, speed: (v) => `1 second = ${v >= 60 ? (v / 60) + ' min' : v + ' s'}` };
-for (const id of Object.keys(outs)) { const f = () => ($(id + 'Out').textContent = outs[id]($(id).value)); $(id).addEventListener('input', f); f(); }
-$('run').addEventListener('click', startGame);
-$('pause').addEventListener('click', () => { if (!running) return; paused = !paused; $('pause').textContent = paused ? 'Resume' : 'Pause'; });
+const outs = { cars: fmt, train: fmt, budget: (v) => `$${fmt(v)} = ${fmt(v / CARD_USD)} cards`, speed: (v) => `1 s = ${v / 60} min` };
+for (const id of Object.keys(outs)) { const f = () => ($(id + 'Out').textContent = outs[id](+$(id).value)); $(id).addEventListener('input', f); f(); }
+$('plan').addEventListener('click', plan);
+document.querySelectorAll('.seg button').forEach((b) => b.addEventListener('click', () => startReplay(b.dataset.kind)));
+$('pause').addEventListener('click', () => { if (!game) return; paused = !paused; $('pause').textContent = paused ? 'Resume' : 'Pause'; });
+$('restart').addEventListener('click', () => startReplay(view));
+$('save').addEventListener('click', () => {
+  const r = saveEvent(runs.ours.record);
+  $('save').disabled = true; $('save').textContent = r.ok ? `Saved as ${r.id}` : 'Could not save (browser storage blocked)';
+  renderHistory();
+  $('status').textContent = 'Saved. Plan again: the planner now uses the gate speeds it just measured.';
+});
+$('clear').addEventListener('click', () => { if (confirm('Forget all saved games in this browser?')) { clearEvents(); renderHistory(); } });
+$('export').addEventListener('click', exportEvents);
+renderHistory();
 
 function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h); labels.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); tiles?.setResolutionFromRenderer(camera, renderer); }
 addEventListener('resize', resize); resize();
@@ -241,12 +326,12 @@ renderer.setAnimationLoop((now) => {
     const txt = a.filter((x) => x.type === 'string').map((x) => x.value).join(' · ');
     if (txt) $('attr').textContent = 'Google · ' + txt + ' · Lots and roads © OpenStreetMap contributors';
   }
-  if (running && !paused) {
+  if (running && !paused && game) {
     simAcc += dt * +$('speed').value;
-    let steps = 0; while (simAcc >= 3 && steps < 400) { simAcc -= 3; steps++; if (game.step()) { finishGame(); break; } }
+    let steps = 0; while (simAcc >= 3 && steps < 400) { simAcc -= 3; steps++; if (game.step()) { running = false; break; } }
   }
-  drawCars();
+  drawLayers();
   renderer.render(scene, camera); labels.render(scene, camera);
 });
 
-startGame();
+plan();
