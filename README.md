@@ -37,44 +37,81 @@ problem, so someone has to coordinate.
   they model one event as a consulting job. None of them remember across games or pick who gets
   an offer.
 
-## Our idea
+## Who it's for: the event operator
 
-Use the same $50 offers and the same budget, but **give them to the fans whose waiting frees the
-most road**, and learn from every game.
+Our user is the team that runs game-day traffic at Gillette: stadium event operations, working
+with Foxborough police and MassDOT. There is no fan app in this version.
 
-1. **Groups.** Split cars by lot and direction (north or south), about 68 groups.
-2. **Value.** For each group: how many car-minutes are saved in total if 100 of its cars wait
-   75 minutes? (This counts the extra wait of the cars that hold back.)
-3. **Yes rate.** From memory of past games: how often fans in that group accepted an offer.
-4. **Rank and offer.** Sort groups by value × yes rate. Offer $50 down the list until the budget
-   is spent.
-5. **Score.** Car-minutes saved per $1,000, flat offer vs targeted, same budget.
+Before each event they already decide:
 
-**Car-minutes saved** = waiting removed, added up over every car. 1,000 cars each waiting
-10 minutes less = 10,000 car-minutes saved.
+- **which lots are delayed-release** (today a fixed set, such as Lots 45 and 55B),
+- **how many $50 cards** to fund, which means the budget,
+- whether to ask for **contraflow** on Route 1,
+- when to open each lot's exits.
 
-### What "memory" means here
+After each event they know some things: how many cards were taken in each lot, and roughly when
+the lots emptied. Nothing turns that into a better plan for the next event.
 
-- **The operator remembers each event:** the plan, the conditions (crowd, weather, trains,
-  contraflow) and how each lot cleared.
-- **Each fan can opt in** to remember their own exits ("52 min, then 31, then 12 in the car")
-  and get a personal suggestion and offers.
-- **Each lot has patterns** across events: which lots jam first, which groups say yes.
-- **What we don't do:** no tracking of people. Fan memory is opt-in and only covers the fan's own
-  exits.
+## What we offer the operator
 
-Memory is stored through the [localmem](https://localmem.org) public API, called from a server
-route so no key ever reaches the browser.
+**A plan before each event, and a record after it that makes the next plan better.**
+
+1. **Before the event,** the operator enters the conditions: expected cars, fans on trains,
+   contraflow or not, and the card budget.
+2. **Stadium Flow recommends where the cards go:** which lots and how many cars in each. This is
+   compared with the plan they use today on the same Route 1 model and the same budget.
+3. **It shows the result of both plans:**
+   - average minutes in the car,
+   - when the last car leaves the lots,
+   - **car-minutes saved per $1,000** of cards.
+   The operator can watch both plans play out in 3D.
+4. **After the event,** the operator records what happened: cards taken per lot and when the lots
+   cleared. That record is saved as memory.
+5. **The next event's plan reads that memory.** A lot where few people took the card gets fewer
+   cards next time. A lot that cleared slower than the model said gets a slower exit rate. The
+   screen says what changed and why.
+
+### How the recommendation works
+
+1. **Groups.** Split cars by lot and direction (north to I-95 or south to I-495), about 68 groups.
+2. **Value.** For each group, the car-minutes saved in total if 100 of its cars leave 75 minutes
+   later. This counts the extra wait of the cars that hold back.
+3. **Take rate.** The share of offered cards that were taken in that group, from past events.
+   Before there is any history, every group uses the same starting estimate.
+4. **Rank and fund.** Sort the groups by value × take rate and fund cards down the list until the
+   budget is spent.
+
+**Car-minutes saved** means the waiting removed, added up over every car. If 1,000 cars each wait
+10 minutes less, that is 10,000 car-minutes saved.
+
+### What memory stores
+
+One record per event, held by the operator:
+
+- the conditions (cars, trains, contraflow, weather),
+- the plan (which lots got cards, and the budget),
+- the result (cards taken per lot, when each lot cleared).
+
+It is stored through the [localmem](https://localmem.org) public API, called from a server route,
+so no key reaches the browser. It holds no personal data: only counts per lot.
+
+**Later, not today:** opt-in fan history and personal offers.
 
 ## Goals for today (done by 19:00)
 
-1. **One number:** targeted beats flat on car-minutes saved per $1,000, shown side by side after a run.
-2. **One picture:** the same game with and without the plan on the 3D map: lots full and Route 1
-   jammed vs the chosen lots holding back and the road moving.
-3. **One memory moment:** game 2 reads what game 1 saved and changes who gets the offer, plus a
-   fan card showing one fan's history.
+1. **The plan beats today's plan.** For one event, show today's fixed lots next to our recommended
+   lots, with the same $ budget, as average minutes in the car, last car out, and car-minutes saved
+   per $1,000. *Done when* both columns fill in after one click and the difference is clear.
+2. **You can see why.** On the 3D map, play both plans. In today's plan, the lots stay full and
+   Route 1 backs up. In ours, the chosen lots hold back and the road keeps moving. *Done when* a
+   20-second clip makes the point without anyone explaining it.
+3. **Event 2 is smarter than event 1.** Run event 1, save its record to localmem, then plan
+   event 2. The plan changes because of the record, for example "Lot 22 took only 30% of its cards,
+   so we moved $8,000 to Lot 15". *Done when* the screen shows the change and the record it came
+   from.
 
 Plus a public link, this repo and a recording.
+
 
 ## What runs now
 
@@ -135,9 +172,9 @@ Coordinates are metres around the stadium centre (42.0909, -71.2643): x east, z 
 
 | Role | Owns |
 |---|---|
-| Lead, model and offers | Targeted vs flat offers in `sim.js`, the score per $1,000 |
-| 3D and interface | Fly-in camera, car models, before/after view, offer panel, fan card |
-| Memory and backend | Server route to localmem (write each game, read before the next), deploy |
+| Lead, model and plan | Recommended vs today's plan in `sim.js`, take rates from records, score per $1,000 |
+| 3D and interface | Operator panel (conditions, budget, plan vs today), before/after playback, fly-in camera, cars |
+| Memory and backend | Server route to localmem: save each event record, read it before planning the next; deploy |
 | Data, story and ship | Real numbers with sources, demo script, recording, submission |
 
 Working rules: small PRs to `main`, pull before you push, say in chat what you're taking, no keys
