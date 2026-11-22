@@ -358,19 +358,23 @@ function showResult() {
   const row = (name, f, cls = '') => `<tr class="${cls}"><td>${name}</td><td>${f(R.none, 'none')}</td><td>${f(R.today, 'today')}</td><td class="ours">${f(R.ours, 'ours')}</td></tr>`;
   const cut = (now, before) => (before > 0 && now < before ? ` <small class="good">−${Math.round((1 - now / before) * 100)}%</small>` : '');
   $('rows').innerHTML = [
-    row('Route 1 jammed', (r, k) => `${r.jamMin} min${k === 'none' ? '' : cut(r.jamMin, R.none.jamMin)}`, 'key'),
+    row('Gate-minutes blocked', (r, k) => fmt(r.blockedGateMin) + (k === 'none' ? '' : cut(r.blockedGateMin, R.none.blockedGateMin)), 'key'),
+    row('Engine idling, all cars', (r, k) => fmt(r.idleH) + ' h' + (k === 'none' ? '' : cut(r.idleH, R.none.idleH)), 'key'),
+    row('Route 1 jammed', (r, k) => `${r.jamMin} min${k === 'none' ? '' : cut(r.jamMin, R.none.jamMin)}`),
     row('Cars stuck at the worst moment', (r, k) => fmt(r.peakStuck) + (k === 'none' ? '' : cut(r.peakStuck, R.none.peakStuck))),
-    row('Gate-minutes blocked', (r, k) => fmt(r.blockedGateMin) + (k === 'none' ? '' : cut(r.blockedGateMin, R.none.blockedGateMin))),
-    row('Engine idling, all cars', (r, k) => fmt(r.idleH) + ' h' + (k === 'none' ? '' : cut(r.idleH, R.none.idleH))),
     row('Delayed lots', (r) => r.lots, 'sub'),
     row('Cars held (one $50 card each)', (r) => fmt(r.held), 'sub'),
     row('Card cost', (r) => '$' + fmt(r.spent), 'sub'),
     row('Avg whistle to highway', (r) => Math.round(r.avgHomeMin) + ' min', 'sub'),
   ].join('');
   const o = R.ours, overBudget = o.spent > conditions.budget;
-  $('headline').innerHTML = o.jamMin < R.none.jamMin
-    ? `<b>${lastPlan.ours.own ? 'Your' : 'The recommended'} ${o.lots} delayed lot${o.lots === 1 ? '' : 's'}</b> keep Route 1 jammed <b>${R.none.jamMin - o.jamMin} min less</b> (${o.jamMin} instead of ${R.none.jamMin}), with ${fmt(R.none.idleH - o.idleH)} fewer hours of engines idling, for $${fmt(o.spent)} of cards. Today's Lot 55: jammed ${R.today.jamMin} min for $${fmt(R.today.spent)}.`
-    : `<b>This set of lots does not shorten the jam</b> (${o.jamMin} min vs ${R.none.jamMin} with no delayed lots). Try other lots, or the recommendation.`;
+  // Lead with what holds whatever the merge rule: blocked gates and idling, against today's lot.
+  const pct = (now, before) => Math.round((1 - now / Math.max(1, before)) * 100);
+  const who = `${lastPlan.ours.own ? 'Your' : 'The recommended'} ${o.lots} delayed lot${o.lots === 1 ? '' : 's'}`;
+  const jamLine = o.jamMin < R.none.jamMin ? `Route 1 is jammed ${o.jamMin} min instead of ${R.none.jamMin}` : `Route 1 stays jammed about as long (${o.jamMin} min vs ${R.none.jamMin}): with this merge rule the road itself is the queue`;
+  $('headline').innerHTML = pct(o.blockedGateMin, R.none.blockedGateMin) > 0
+    ? `<b>${who}</b> cut blocked gate-minutes by <b>${pct(o.blockedGateMin, R.none.blockedGateMin)}%</b> and engine idling by <b>${fmt(R.none.idleH - o.idleH)} hours</b>, for $${fmt(o.spent)} of cards. Today's Lot 55, for $${fmt(R.today.spent)}: ${pct(R.today.blockedGateMin, R.none.blockedGateMin)}% and ${fmt(R.none.idleH - R.today.idleH)} hours. ${jamLine}.`
+    : `<b>${who} do not unblock gates</b> (${fmt(o.blockedGateMin)} gate-minutes vs ${fmt(R.none.blockedGateMin)} with no delayed lots). Try other lots, or the recommendation.`;
   $('fine').textContent = `Time to the highway stays about the same (${Math.round(o.avgHomeMin)} vs ${Math.round(R.none.avgHomeMin)} min): Route 1 carries the same cars an hour either way. Delayed lots move the wait out of running cars and out of the jam, into the stadium and Patriot Place. Fans in a delayed lot wait about ${o.heldWaitMin} min longer, for $50 and free parking.${overBudget ? ` This set costs $${fmt(o.spent)}, over the $${fmt(conditions.budget)} budget.` : ''}`;
   const rt = lastPlan.releaseTest, at = (min) => rt.rows.find((r) => r.min === min);
   const chosen = conditions.releaseMin, adv = at(rt.pick), cur = at(chosen);
