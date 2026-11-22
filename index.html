@@ -7,132 +7,156 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
-  :root { --bg:#0e1113; --panel:rgba(16,20,23,.92); --fg:#e6e9e4; --muted:#9aa3a9; --line:#2a3237; --amber:#f2a516; --teal:#34c6a8; --blue:#5aa9ff; --red:#ff4d4d; --sign:#13684a;
+  :root { --bg:#0e1113; --panel:rgba(14,18,21,.95); --fg:#e6e9e4; --muted:#a3acb2; --line:#2c353a; --amber:#f2a516; --teal:#34c6a8; --blue:#5aa9ff; --red:#ff4d4d; --sign:#13684a;
     --display:"Barlow Condensed","Arial Narrow",sans-serif; --body:"Barlow",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace; color-scheme:dark }
-  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:14px/1.45 var(--body); overflow:hidden }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:16px/1.5 var(--body); overflow:hidden }
   #app { position:fixed; inset:0 } #app canvas { display:block }
-  .panel { position:fixed; top:12px; left:12px; bottom:12px; width:360px; overflow:auto; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; display:flex; flex-direction:column; gap:12px; backdrop-filter:blur(6px) }
-  .sign { display:inline-flex; gap:8px; align-items:center; background:var(--sign); color:#f4f6f2; border-radius:5px; padding:2px 10px; font:700 13px var(--display); letter-spacing:.05em; text-transform:uppercase; width:fit-content; border:2px solid rgba(244,246,242,.7) }
-  .sign b { background:#f4f6f2; color:var(--sign); border-radius:3px; padding:0 5px }
-  h1 { font:700 28px/1 var(--display); margin:0 }
-  h2 { font:700 17px var(--display); margin:0; letter-spacing:.02em; text-transform:uppercase; color:var(--muted) }
-  .muted { color:var(--muted); font-size:12.5px; margin:0 }
-  .q { margin:0; font-size:14px } .q b { color:var(--amber) }
-  section { display:grid; gap:8px; border-top:1px solid var(--line); padding-top:10px }
-  section[hidden] { display:none }
-  .field { display:grid; gap:2px } .field label { display:flex; justify-content:space-between; gap:8px; font-weight:500 }
-  .field output { font:13px var(--mono); color:var(--amber) } .field small { color:var(--muted); font-size:12px; line-height:1.3 }
-  input[type=range] { width:100%; accent-color:var(--amber) }
-  select { background:#1b2125; color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:5px 6px; font:13px var(--body) }
-  .check { display:flex; gap:8px; align-items:flex-start } .check input { margin-top:3px; accent-color:var(--amber) }
-  button { border:1px solid var(--line); background:#1b2125; color:var(--fg); padding:8px 10px; border-radius:6px; font:600 14px var(--body); cursor:pointer }
+  button { border:1px solid var(--line); background:#1b2125; color:var(--fg); padding:10px 14px; border-radius:8px; font:600 15px var(--body); cursor:pointer }
+  button:hover { border-color:#4a565d }
   button.primary { background:var(--amber); border-color:var(--amber); color:#14110a }
   button:disabled { opacity:.5; cursor:default }
-  button:focus-visible, input:focus-visible, select:focus-visible { outline:2px solid var(--teal); outline-offset:2px }
-  .seg { display:grid; grid-template-columns:repeat(3,1fr); border:1px solid var(--line); border-radius:6px; overflow:hidden }
-  .seg button { border:0; border-radius:0; background:transparent; font-weight:500 } .seg button[aria-pressed=true] { background:var(--fg); color:var(--bg) }
-  .row { display:flex; gap:8px; flex-wrap:wrap }
-  table { width:100%; border-collapse:collapse; font-size:13px }
-  th, td { text-align:right; padding:4px 0 4px 8px; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums }
+  button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline:2px solid var(--teal); outline-offset:2px }
+  select { background:#1b2125; color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:15px var(--body) }
+  input[type=range] { width:100%; accent-color:var(--amber) }
+  .muted { color:var(--muted); font-size:14.5px; margin:0 }
+  .row { display:flex; gap:10px; flex-wrap:wrap }
+  svg.ic { width:24px; height:24px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; flex:none }
+
+  /* ---- dock: one icon per panel, always on top of the map ---- */
+  .dock { position:fixed; left:12px; top:12px; display:flex; flex-direction:column; gap:8px; z-index:5 }
+  .dock button { width:64px; padding:8px 0 6px; display:grid; justify-items:center; gap:3px; font:600 11.5px var(--body); background:var(--panel); backdrop-filter:blur(6px); position:relative }
+  .dock button[aria-expanded=true] { border-color:var(--amber); color:var(--amber) }
+  .dock button:disabled { opacity:.35 }
+  .dock .badge { position:absolute; top:4px; right:6px; min-width:18px; height:18px; border-radius:9px; background:var(--blue); color:#0b1520; font:700 11px/18px var(--mono); padding:0 4px; box-sizing:border-box }
+  .dock .badge:empty { display:none }
+  .dock .logo { width:64px; height:64px; border-radius:8px; background:var(--sign); border:2px solid rgba(244,246,242,.7); display:grid; place-items:center; font:700 13px/1.05 var(--display); text-transform:uppercase; text-align:center; letter-spacing:.04em; color:#f4f6f2; box-sizing:border-box }
+
+  /* ---- panels: big and readable, folded back to the icon when done ---- */
+  .drawer { position:fixed; left:88px; top:12px; bottom:12px; width:min(540px, calc(100vw - 112px)); overflow:auto; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px 22px 22px; display:grid; align-content:start; gap:16px; backdrop-filter:blur(8px); z-index:4; box-shadow:0 12px 40px rgba(0,0,0,.45); box-sizing:border-box }
+  body.has-player .drawer { bottom:96px }
+  .drawer[hidden] { display:none }
+  .drawer header { display:flex; align-items:center; gap:10px; position:sticky; top:-18px; margin:-18px -22px 0; padding:16px 22px 10px; background:inherit; z-index:1 }
+  .drawer header h2 { flex:1; margin:0; font:700 28px/1.05 var(--display); letter-spacing:.01em }
+  .drawer header .min { padding:8px; display:grid; place-items:center }
+  .drawer h3 { margin:6px 0 0; font:700 18px var(--display); text-transform:uppercase; letter-spacing:.04em; color:var(--muted) }
+  .drawer p { margin:0 }
+  .q { font-size:17px } .q b { color:var(--amber) }
+  .field { display:grid; gap:4px } .field label { display:flex; justify-content:space-between; gap:10px; font-weight:600; font-size:16px }
+  .field output { font:15px var(--mono); color:var(--amber) } .field small { color:var(--muted); font-size:14px; line-height:1.35 }
+  .check { display:flex; gap:10px; align-items:flex-start; font-size:16px } .check input { margin-top:5px; width:18px; height:18px; accent-color:var(--amber) }
+  table { width:100%; border-collapse:collapse; font-size:16px }
+  th, td { text-align:right; padding:8px 0 8px 10px; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums }
   th:first-child, td:first-child { text-align:left; padding-left:0; color:var(--muted); font-weight:400 }
-  thead th { font:600 11px var(--body); text-transform:uppercase; letter-spacing:.05em; color:var(--muted) }
-  td.ours { color:var(--fg); font-weight:600 } tr.key td.ours { color:var(--amber); font-size:15px }
-  .why { margin:0; padding-left:16px; display:grid; gap:6px; font-size:13px }
-  .advice { font-size:13px; background:rgba(90,169,255,.1); border-left:3px solid var(--blue); padding:6px 8px; border-radius:4px; margin:0 }
-  .hud { position:fixed; top:12px; right:12px; display:grid; grid-template-columns:repeat(5,auto); gap:4px 16px; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 14px; font:12px var(--mono) }
-  .hud b { font:700 22px var(--display); display:block; color:var(--fg) } .hud span { color:var(--muted) } .hud .red b { color:var(--red) }
-  .hud .title { grid-column:1/-1; font:600 13px var(--body); color:var(--amber) }
-  .side { position:fixed; right:12px; bottom:12px; width:330px; max-height:42%; overflow:auto; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; display:grid; gap:8px }
-  .side ol { margin:0; padding-left:18px; display:grid; gap:6px; font-size:13px } .side li span { color:var(--muted) }
-  .mapkey summary { cursor:pointer; list-style:none } .mapkey summary h2 { display:inline } .mapkey summary::after { content:' (hide)'; color:var(--muted); font-size:12px } .mapkey:not([open]) summary::after { content:' (show)' }
-  .mapkey { position:fixed; left:384px; bottom:12px; width:290px; max-height:46%; overflow:auto; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-size:12.5px }
-  .mapkey dl { margin:6px 0 0; display:grid; gap:2px } .mapkey dt { font-weight:600; margin-top:6px; display:flex; gap:8px; align-items:center } .mapkey dd { margin:0 0 0 22px; color:var(--muted); line-height:1.35 }
-  .mapkey i { flex:none; display:inline-block; width:14px; height:14px; border-radius:3px } .mapkey i.ring { border:3px solid var(--red); border-radius:50%; width:10px; height:10px }
+  thead th { font:600 12.5px var(--body); text-transform:uppercase; letter-spacing:.05em; color:var(--muted) }
+  td.ours { color:var(--fg); font-weight:600 } tr.key td { font-size:18px } tr.key td.ours { color:var(--amber); font-size:20px }
+  .why { margin:0; padding-left:20px; display:grid; gap:8px; font-size:15.5px }
+  .advice { font-size:15.5px; background:rgba(90,169,255,.1); border-left:3px solid var(--blue); padding:10px 12px; border-radius:6px }
+  .bar { height:6px; background:var(--line); border-radius:3px; overflow:hidden } .bar i { display:block; height:100%; width:0; background:var(--amber); transition:width .2s }
+  .history { margin:0; padding-left:22px; display:grid; gap:10px; font-size:15.5px } .history li span { color:var(--muted) }
+  .mapkey { margin:0; display:grid; gap:4px } .mapkey dt { font-weight:600; margin-top:10px; display:flex; gap:10px; align-items:center; font-size:16.5px } .mapkey dd { margin:0 0 0 28px; color:var(--muted); line-height:1.45; font-size:15px }
+  .mapkey i { flex:none; display:inline-block; width:18px; height:18px; border-radius:4px } .mapkey i.ring { border:3px solid var(--red); border-radius:50%; width:12px; height:12px }
   .mapkey i.card { background:rgba(30,70,120,.9); border:1px solid var(--blue) }
-  .mapkey i.tower { display:inline-flex; flex-direction:column; width:10px; height:18px; border-radius:2px; overflow:hidden } .mapkey i.tower b { flex:1 }
-  .attr { position:fixed; left:700px; bottom:14px; font-size:11px; color:var(--muted); max-width:40ch }
-  .story { position:fixed; left:384px; top:12px; width:440px; background:rgba(12,16,19,.96); border:1px solid var(--amber); border-radius:10px; padding:12px 14px; display:grid; gap:6px; box-shadow:0 8px 30px rgba(0,0,0,.4) }
-  .story[hidden], .info[hidden] { display:none } .story h3 { margin:0; font:700 20px var(--display) } .story p { margin:0 } .story .step { font:500 11px var(--mono); color:var(--amber); text-transform:uppercase; letter-spacing:.06em }
-  .info { position:fixed; right:12px; top:110px; width:330px; max-height:calc(58% - 130px); overflow:auto; background:rgba(12,16,19,.96); border:1px solid var(--blue); border-radius:10px; padding:12px 14px; font-size:13px }
-  .info h3 { margin:0 0 4px; font:700 20px var(--display) } .info p { margin:4px 0 } .info .k { color:var(--muted) } .info .x { position:absolute; right:8px; top:6px; border:0; background:none; font-size:20px; padding:2px 6px }
-  .info .tag { display:inline-block; font:600 11px var(--mono); padding:1px 6px; border-radius:3px; background:rgba(255,77,77,.2); color:var(--red) } .info .tag.ok { background:rgba(52,198,168,.2); color:var(--teal) }
-  .lbl.tower { font:600 11px var(--body); background:rgba(10,12,14,.8); border:1px solid rgba(255,255,255,.25) }
-  .lbl.tower.sel { border-color:var(--amber); color:var(--amber) }
-  .jumps { display:flex; flex-wrap:wrap; gap:6px; align-items:center } .jumps button { padding:4px 8px; font-size:12px; font-weight:500 }
-  .lbl { font:600 12px var(--body); color:#fff; background:rgba(10,12,14,.72); padding:2px 6px; border-radius:4px; white-space:nowrap; pointer-events:none }
-  .lbl.big { font:700 14px var(--display); letter-spacing:.04em; text-transform:uppercase; background:var(--sign); border:1px solid rgba(255,255,255,.6) }
+  .mapkey i.tower { display:inline-flex; flex-direction:column; width:12px; height:22px; border-radius:2px; overflow:hidden } .mapkey i.tower b { flex:1 }
+  kbd { font:13px var(--mono); border:1px solid var(--line); border-radius:4px; padding:0 5px; background:#1b2125 }
+
+  /* ---- player bar: the replay controls, visible while the panels are folded ---- */
+  .player { position:fixed; left:88px; right:12px; bottom:12px; margin:0 auto; width:fit-content; max-width:calc(100vw - 112px); display:flex; flex-wrap:wrap; gap:10px; align-items:center; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:10px 12px; backdrop-filter:blur(8px); z-index:3; box-sizing:border-box }
+  .player[hidden] { display:none }
+  .player .sep { width:1px; align-self:stretch; background:var(--line) }
+  .player .play { min-width:96px; display:inline-flex; gap:6px; align-items:center; justify-content:center }
+  .seg { display:inline-grid; grid-template-columns:repeat(3,auto); border:1px solid var(--line); border-radius:8px; overflow:hidden }
+  .seg button { border:0; border-radius:0; background:transparent; font-weight:500 } .seg button[aria-pressed=true] { background:var(--fg); color:var(--bg); font-weight:700 }
+  .jumps { display:flex; gap:6px; align-items:center } .jumps button { padding:8px 10px; font-size:14px; font-weight:500 }
+  .player .speed { display:flex; gap:8px; align-items:center; font-size:14px; color:var(--muted) } .player .speed input { width:110px } .player .speed output { font:13px var(--mono); color:var(--amber); min-width:9ch }
+
+  /* ---- map controls: zoom, reset, go to a lot ---- */
+  .mapctl { position:fixed; right:12px; bottom:12px; display:grid; gap:6px; justify-items:end; z-index:3 }
+  body.has-player .mapctl { bottom:96px }
+  .mapctl .btns { display:grid; gap:6px }
+  .mapctl button { width:48px; height:48px; padding:0; display:grid; place-items:center; background:var(--panel); font-size:22px; backdrop-filter:blur(6px) }
+  .mapctl select { max-width:200px; background:var(--panel) }
+  .mapctl .hint { font-size:12.5px; color:var(--muted); background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:6px 10px; max-width:220px; text-align:right }
+
+  .hud { position:fixed; top:12px; right:12px; display:grid; grid-template-columns:repeat(5,auto); gap:4px 18px; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px 16px; font:13px var(--mono); z-index:2 }
+  .hud b { font:700 26px var(--display); display:block; color:var(--fg) } .hud span { color:var(--muted) } .hud .red b { color:var(--red) }
+  .hud .title { grid-column:1/-1; font:600 15px var(--body); color:var(--amber) }
+  .attr { position:fixed; right:72px; bottom:2px; font-size:11px; color:var(--muted); max-width:46ch; text-align:right; z-index:1 }
+
+  .story { position:fixed; left:50%; transform:translateX(-50%); bottom:96px; width:min(620px, calc(100vw - 32px)); background:rgba(12,16,19,.97); border:1px solid var(--amber); border-radius:12px; padding:16px 20px; display:grid; gap:8px; box-shadow:0 10px 36px rgba(0,0,0,.5); z-index:6; box-sizing:border-box; font-size:17px }
+  .story[hidden], .info[hidden] { display:none } .story h3 { margin:0; font:700 26px var(--display) } .story p { margin:0 } .story .step { font:500 12.5px var(--mono); color:var(--amber); text-transform:uppercase; letter-spacing:.06em }
+  .info { position:fixed; right:12px; top:124px; width:min(420px, calc(100vw - 32px)); max-height:calc(100% - 124px - 280px); overflow:auto; background:rgba(12,16,19,.97); border:1px solid var(--blue); border-radius:12px; padding:16px 20px; font-size:15.5px; z-index:4; box-sizing:border-box }
+  .info h3 { margin:0 0 6px; font:700 26px var(--display) } .info p { margin:6px 0 } .info .k { color:var(--muted) } .info .x { position:absolute; right:8px; top:8px; border:0; background:none; font-size:24px; padding:2px 8px }
+  .info .tag { display:inline-block; font:600 12px var(--mono); padding:1px 6px; border-radius:3px; background:rgba(255,77,77,.2); color:var(--red) } .info .tag.ok { background:rgba(52,198,168,.2); color:var(--teal) }
+
+  .lbl { font:600 13px var(--body); color:#fff; background:rgba(10,12,14,.72); padding:2px 7px; border-radius:4px; white-space:nowrap; pointer-events:none }
+  .lbl.big { font:700 15px var(--display); letter-spacing:.04em; text-transform:uppercase; background:var(--sign); border:1px solid rgba(255,255,255,.6) }
   .lbl.card { background:rgba(30,70,120,.9); border:1px solid var(--blue) }
-  .bar { height:4px; background:var(--line); border-radius:2px; overflow:hidden } .bar i { display:block; height:100%; width:0; background:var(--amber); transition:width .2s }
-  @media (max-width: 1200px) { .side { display:none } .info { max-height:calc(100% - 140px) } }
-  @media (max-width: 900px) { .panel { width:auto; right:12px; bottom:auto; max-height:55% } .hud { display:none } .side, .mapkey, .attr { display:none } .story { left:12px; right:12px; width:auto; top:auto; bottom:12px } }
+  .lbl.tower { font:600 12.5px var(--body); background:rgba(10,12,14,.8); border:1px solid rgba(255,255,255,.25) }
+  .lbl.tower.sel { border-color:var(--amber); color:var(--amber) }
+
+  @media (max-width: 1100px) { .player .speed, .mapctl .hint { display:none } .info { max-height:calc(100% - 124px - 300px) } }
+  @media (max-width: 900px) {
+    .dock { flex-direction:row; left:12px; right:12px } .dock .logo { display:none } .dock button { width:auto; flex:1 }
+    .drawer { left:12px; right:12px; width:auto; top:84px; bottom:auto; max-height:calc(100% - 200px) } body.has-player .drawer { bottom:auto }
+    .hud, .attr { display:none } .player { left:12px; max-width:calc(100vw - 24px) } .player .jumps span { display:none }
+    .info { top:84px; max-height:50% } .mapctl select { display:none }
+  }
 </style>
 </head>
 <body>
 <div id="app"></div>
-<aside class="panel" aria-label="Game-day planner">
-  <div class="sign"><b>1</b> Foxborough · Route 1</div>
-  <h1>Game-day planner</h1>
+
+<nav class="dock" aria-label="Panels">
+  <div class="logo" aria-hidden="true">Stadium<br>Flow</div>
+  <button type="button" data-panel="plan" aria-controls="p-plan" aria-expanded="false" title="Plan tonight's game">
+    <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>Plan</button>
+  <button type="button" data-panel="results" aria-controls="p-results" aria-expanded="false" title="Results: today's lot vs ours" disabled>
+    <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M8 17v-5M13 17V8M18 17v-9"/></svg>Results</button>
+  <button type="button" data-panel="memory" aria-controls="p-memory" aria-expanded="false" title="Past games the planner learned from">
+    <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 3"/></svg>Past games<span class="badge" id="memCount"></span></button>
+  <button type="button" data-panel="key" aria-controls="p-key" aria-expanded="false" title="How to read the map">
+    <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/></svg>Map key</button>
+</nav>
+
+<aside class="drawer" id="p-plan" aria-labelledby="h-event" hidden>
+  <header><h2 id="h-event">Plan tonight's game</h2><button class="min" type="button" data-close title="Fold away (Esc)" aria-label="Fold away"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18 9 12l6-6"/></svg></button></header>
   <p class="q">You have money for <b>$50 Visa gift cards</b>. Each one pays a driver to leave their car parked until the card lots open after the game. <b>Which lots should get them?</b></p>
   <p class="muted" id="mode">Loading the map…</p>
-
-  <section aria-labelledby="h-event">
-    <h2 id="h-event">1 · Tonight's game</h2>
-    <div class="field"><label for="cars">Cars parked <output id="carsOut"></output></label><input id="cars" type="range" min="6000" max="17500" step="500" value="14000"><small>Our estimate from lot area: about 17,900 spaces.</small></div>
-    <div class="field"><label for="train">Fans on trains <output id="trainOut"></output></label><input id="train" type="range" min="0" max="10000" step="500" value="3000"><small>About 1,200 fewer cars per 5,000 riders (Foxborough police).</small></div>
-    <label class="check"><input type="checkbox" id="contra"> <span>Extra northbound lane (contraflow)<br><small class="muted">MassDOT runs one for big events.</small></span></label>
-    <div class="field"><label for="budget">Card budget <output id="budgetOut"></output></label><input id="budget" type="range" min="5000" max="100000" step="5000" value="50000"></div>
-    <div class="field"><label for="release">Card lots open at</label><select id="release"><option value="75" selected>75 min after the game (today's rule)</option><option value="45">45 min</option><option value="60">60 min</option><option value="90">90 min</option><option value="105">105 min</option></select></div>
-    <button class="primary" id="plan" type="button">Plan this game</button>
-    <div class="bar" aria-hidden="true"><i id="progress"></i></div>
-    <p class="muted" id="status" role="status">Uses past games saved in this browser.</p>
-  </section>
-
-  <section aria-labelledby="h-result" id="resultBox" hidden>
-    <h2 id="h-result">2 · Today's lot vs ours</h2>
-    <table>
-      <thead><tr><th scope="col"></th><th scope="col">No cards</th><th scope="col">Today</th><th scope="col">Ours</th></tr></thead>
-      <tbody id="rows"></tbody>
-    </table>
-    <p class="muted" id="lotsLine"></p>
-    <p class="advice" id="advice"></p>
-    <ul class="why" id="why"></ul>
-  </section>
-
-  <section aria-labelledby="h-replay" id="replayBox" hidden>
-    <h2 id="h-replay">3 · Watch it on Route 1</h2>
-    <div class="seg" role="group" aria-label="Which plan to replay"><button type="button" data-kind="none" aria-pressed="false">No cards</button><button type="button" data-kind="today" aria-pressed="false">Today's lot</button><button type="button" data-kind="ours" aria-pressed="true">Our lots</button></div>
-    <button class="primary" id="tour" type="button">Explain the screen, step by step</button>
-    <div class="row"><button id="pause" type="button">Play</button><button id="restart" type="button">Back to the whistle</button></div>
-    <div class="jumps" role="group" aria-label="Jump to a moment"><span class="muted">Jump to:</span><button type="button" data-min="0">Whistle</button><button type="button" data-min="20">20 min</button><button type="button" data-min="45">45 min</button><button type="button" data-min="76">Card lots open</button><button type="button" data-min="120">2 hours</button></div>
-    <div class="field"><label for="speed">Speed <output id="speedOut"></output></label><input id="speed" type="range" min="30" max="600" step="30" value="120"></div>
-  </section>
-
-  <section aria-labelledby="h-save" id="saveBox" hidden>
-    <h2 id="h-save">4 · After the game</h2>
-    <p class="muted">Save what happened with our lots: cards taken and how fast each lot's gates let cars out. The next plan learns from it.</p>
-    <button id="save" type="button">Save this game</button>
-  </section>
+  <div class="field"><label for="cars">Cars parked <output id="carsOut"></output></label><input id="cars" type="range" min="6000" max="17500" step="500" value="14000"><small>Our estimate from lot area: about 17,900 spaces.</small></div>
+  <div class="field"><label for="train">Fans on trains <output id="trainOut"></output></label><input id="train" type="range" min="0" max="10000" step="500" value="3000"><small>About 1,200 fewer cars per 5,000 riders (Foxborough police).</small></div>
+  <label class="check"><input type="checkbox" id="contra"> <span>Extra northbound lane (contraflow)<br><small class="muted">MassDOT turns one southbound lane northbound for big events.</small></span></label>
+  <div class="field"><label for="budget">Card budget <output id="budgetOut"></output></label><input id="budget" type="range" min="5000" max="100000" step="5000" value="50000"></div>
+  <div class="field"><label for="release">Card lots open at</label><select id="release"><option value="75" selected>75 min after the game (today's rule)</option><option value="45">45 min</option><option value="60">60 min</option><option value="90">90 min</option><option value="105">105 min</option></select></div>
+  <button class="primary" id="plan" type="button">Plan this game</button>
+  <div class="bar" aria-hidden="true"><i id="progress"></i></div>
+  <p class="muted" id="status" role="status">Uses past games saved in this browser.</p>
 </aside>
 
-<div class="hud" aria-live="polite">
-  <div class="title" id="hTitle">Our lots</div>
-  <div><span>After the game</span><b id="hClock">0 min</b></div>
-  <div><span>Still in lots</span><b id="hLots">0</b></div>
-  <div><span>On Route 1</span><b id="hRoad">0</b></div>
-  <div><span>Home</span><b id="hGone">0</b></div>
-  <div class="red"><span>Gates blocked</span><b id="hBlocked">0</b></div>
-</div>
+<aside class="drawer" id="p-results" aria-labelledby="h-result" hidden>
+  <header><h2 id="h-result">Today's lot vs ours</h2><button class="min" type="button" data-close title="Fold away (Esc)" aria-label="Fold away"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18 9 12l6-6"/></svg></button></header>
+  <table>
+    <thead><tr><th scope="col"></th><th scope="col">No cards</th><th scope="col">Today</th><th scope="col">Ours</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <p class="muted" id="lotsLine"></p>
+  <p class="advice" id="advice"></p>
+  <ul class="why" id="why"></ul>
+  <div class="row"><button class="primary" id="watch" type="button">Watch it on the map</button><button id="tour" type="button">Explain the screen, step by step</button></div>
+  <h3>After the game</h3>
+  <p class="muted">Save what happened with our lots: cards taken and how fast each lot's gates let cars out. The next plan learns from it.</p>
+  <button id="save" type="button">Save this game</button>
+</aside>
 
-<aside class="side" aria-label="Past games">
-  <h2>Past games (memory)</h2>
-  <p class="muted" id="memNote">Each saved game teaches the planner how fast each lot really empties.</p>
-  <ol id="history"></ol>
+<aside class="drawer" id="p-memory" aria-labelledby="h-memory" hidden>
+  <header><h2 id="h-memory">Past games</h2><button class="min" type="button" data-close title="Fold away (Esc)" aria-label="Fold away"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18 9 12l6-6"/></svg></button></header>
+  <p class="muted" id="memNote">Each saved game teaches the planner how fast each lot really empties. Saved in this browser only.</p>
+  <ol class="history" id="history"></ol>
   <div class="row"><button id="clear" type="button">Forget all</button><button id="export" type="button">Download</button></div>
 </aside>
 
-<details class="mapkey" open aria-label="How to read the map">
-  <summary><h2>How to read the map</h2></summary>
-  <dl>
+<aside class="drawer" id="p-key" aria-labelledby="h-key" hidden>
+  <header><h2 id="h-key">How to read the map</h2><button class="min" type="button" data-close title="Fold away (Esc)" aria-label="Fold away"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18 9 12l6-6"/></svg></button></header>
+  <dl class="mapkey">
     <dt><i class="tower"><b style="background:#6b7680"></b><b style="background:#5aa9ff"></b><b style="background:#f2a516"></b></i>Each tower is one parking lot</dt>
     <dd>Its height is the cars still in it (1,000 cars is about 200 m tall). It shrinks as the lot empties.</dd>
     <dt><i style="background:#f2a516"></i>Amber: drivers in their car, trying to get out</dt>
@@ -146,9 +170,45 @@
     <dt><i class="ring"></i>Red ring: a gate that can't let anyone out</dt>
     <dd>The road outside is full, so the lot is stuck. The red line points to the stretch of Route 1 blocking it.</dd>
     <dt><i class="card"></i>Blue tags: lots that got cards in this plan</dt>
-    <dd><b>Click any tower or road bar</b> to see what is happening there.</dd>
+    <dd><b>Click any tower or road bar</b> to fly to it and see what is happening there.</dd>
   </dl>
-</details>
+  <h3>Moving around</h3>
+  <dl class="mapkey">
+    <dt>Turn and tilt</dt><dd>Drag with the mouse or one finger.</dd>
+    <dt>Zoom in and out</dt><dd>Scroll, pinch, or the <kbd>+</kbd> <kbd>−</kbd> buttons at the bottom right. Zoom goes toward the pointer.</dd>
+    <dt>Slide the map</dt><dd>Right-drag, Shift-drag, or two fingers.</dd>
+    <dt>Go to a lot</dt><dd>Click its tower, or pick it from "Go to a lot".</dd>
+  </dl>
+</aside>
+
+<div class="player" id="player" hidden>
+  <div class="seg" role="group" aria-label="Which plan to replay"><button type="button" data-kind="none" aria-pressed="false">No cards</button><button type="button" data-kind="today" aria-pressed="false">Today's lot</button><button type="button" data-kind="ours" aria-pressed="true">Our lots</button></div>
+  <span class="sep" aria-hidden="true"></span>
+  <button class="primary play" id="pause" type="button">Play</button>
+  <button id="restart" type="button" title="Back to the whistle" aria-label="Back to the whistle"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/></svg></button>
+  <span class="sep" aria-hidden="true"></span>
+  <div class="jumps" role="group" aria-label="Jump to a moment"><span class="muted">Jump to</span><button type="button" data-min="0">Whistle</button><button type="button" data-min="20">20 min</button><button type="button" data-min="45">45 min</button><button type="button" data-min="76">Card lots open</button><button type="button" data-min="120">2 h</button></div>
+  <label class="speed" for="speed">Speed <input id="speed" type="range" min="30" max="600" step="30" value="120"><output id="speedOut"></output></label>
+</div>
+
+<div class="mapctl" aria-label="Map controls">
+  <select id="goto" aria-label="Go to a lot"><option value="">Go to a lot…</option></select>
+  <div class="btns">
+    <button type="button" id="zoomIn" title="Zoom in" aria-label="Zoom in">+</button>
+    <button type="button" id="zoomOut" title="Zoom out" aria-label="Zoom out">−</button>
+    <button type="button" id="home" title="Whole area" aria-label="Show the whole area"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6"/></svg></button>
+  </div>
+</div>
+
+<div class="hud" aria-live="polite">
+  <div class="title" id="hTitle">Our lots</div>
+  <div><span>After the game</span><b id="hClock">0 min</b></div>
+  <div><span>Still in lots</span><b id="hLots">0</b></div>
+  <div><span>On Route 1</span><b id="hRoad">0</b></div>
+  <div><span>Home</span><b id="hGone">0</b></div>
+  <div class="red"><span>Gates blocked</span><b id="hBlocked">0</b></div>
+</div>
+
 <aside class="story" id="story" hidden aria-live="polite">
   <p class="step" id="storyStep"></p>
   <h3 id="storyTitle"></h3>

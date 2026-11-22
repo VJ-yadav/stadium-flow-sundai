@@ -36,6 +36,35 @@ controls.maxPolarAngle = Math.PI * 0.44;   // never tilt to or below the horizon
 controls.screenSpacePanning = false;        // pan along the ground, not up and down
 controls.minDistance = 80; controls.maxDistance = 6000;
 controls.enableDamping = true;
+controls.zoomToCursor = true;               // scroll or pinch zooms toward what is under the pointer
+controls.zoomSpeed = 1.4;
+const HOME = { cam: new THREE.Vector3(-1350, 1000, 1250), target: new THREE.Vector3(-250, 0, -250) };
+
+// Fly the camera smoothly to a new target and distance (click a tower, "Go to a lot", zoom buttons).
+let fly = null;
+function flyTo(target, dist, camPos = null) {
+  const off = camera.position.clone().sub(controls.target);
+  if (!camPos) {
+    const flatDir = new THREE.Vector3(off.x, 0, off.z).normalize();
+    if (!isFinite(flatDir.x)) flatDir.set(-0.7, 0, 0.7);
+    const tilt = Math.max(0.55, Math.asin(THREE.MathUtils.clamp(off.y / off.length(), 0, 1)));  // keep at least ~32° from the ground
+    camPos = target.clone().addScaledVector(flatDir, Math.cos(tilt) * dist).add(new THREE.Vector3(0, Math.sin(tilt) * dist, 0));
+  }
+  fly = { t: 0, fromT: controls.target.clone(), fromC: camera.position.clone(), toT: target.clone(), toC: camPos };
+}
+function stepFly(dt) {
+  if (!fly) return;
+  fly.t = Math.min(1, fly.t + dt / 0.9);
+  const e = fly.t < 0.5 ? 2 * fly.t * fly.t : 1 - (-2 * fly.t + 2) ** 2 / 2;
+  controls.target.lerpVectors(fly.fromT, fly.toT, e); camera.position.lerpVectors(fly.fromC, fly.toC, e);
+  if (fly.t >= 1) fly = null;
+}
+function zoomBy(f) {
+  const off = camera.position.clone().sub(controls.target);
+  const d = THREE.MathUtils.clamp(off.length() * f, controls.minDistance, controls.maxDistance);
+  flyTo(controls.target.clone(), d, controls.target.clone().addScaledVector(off.normalize(), d));
+}
+renderer.domElement.addEventListener('pointerdown', () => { fly = null; });   // the user takes over
 // The target stays on the ground near Foxborough and the camera stays above whatever is under it
 // (the Google ground is not at y = 0, so heights come from the tiles: groundY and a sample under the camera).
 let underCam = null, sinceUnder = 0;
@@ -309,11 +338,15 @@ function showResult() {
       ? `For this game the road clears sooner: opening at ${rt.pick} min gets ${Math.round(adv.carMinSaved / cur.carMinSaved * 100)}% of the benefit and card holders get home ${chosen - rt.pick} min earlier.`
       : `For this game Route 1 is still jammed at ${chosen} min, so card holders drive into it. Opening at ${rt.pick} min saves about ${Math.round((adv.carMinSaved / cur.carMinSaved - 1) * 100)}% more.`;
   $('why').innerHTML = lastPlan.why.map((w) => `<li>${w}</li>`).join('');
-  $('resultBox').hidden = false; $('replayBox').hidden = false; $('saveBox').hidden = false; $('save').disabled = false; $('save').textContent = 'Save this game';
+  $('save').disabled = false; $('save').textContent = 'Save this game';
+  document.querySelector('[data-panel=results]').disabled = false;
+  $('player').hidden = false; document.body.classList.add('has-player');
+  openPanel('results');
 }
 
 function renderHistory() {
   const ev = listEvents();
+  $('memCount').textContent = ev.length || '';
   $('history').innerHTML = ev.length ? ev.map((r) => `<li><strong>${r.id}</strong>: ${fmt(r.conditions.cars)} cars, ${r.conditions.contraflow ? 'contraflow, ' : ''}$${fmt(r.plan.budget)} of cards<br><span>${Math.round(r.result.avgInCarMin)} min in the car on average, ${fmt(r.result.perThousand)} min saved per $1,000; gate speeds counted in ${Object.keys(r.result.exitPerMin || {}).length} lots</span></li>`).join('') : '<li><span>None yet. Plan a game, then save it.</span></li>';
 }
 
@@ -328,8 +361,25 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   const hit = picker.intersectObjects([colMesh, roadMesh], false)[0];
   if (!hit) return;
   selected = hit.object === colMesh ? { lot: Math.floor(hit.instanceId / 3) } : { dir: Math.floor(hit.instanceId / cells.length), cell: hit.instanceId % cells.length };
+  if (selected.lot !== undefined) flyToLot(selected.lot);
+  else { const c = cells[selected.cell]; flyTo(new THREE.Vector3(c.x, groundY, c.z), 650); }
   showInfo(selected);
 });
+// Close enough to read the tower: further back for tall towers.
+function flyToLot(l) {
+  const lot = lots[l], tall = lastCounts ? (lastCounts[l][0] + lastCounts[l][1] + lastCounts[l][2]) * PER_CAR_M : 0;
+  flyTo(new THREE.Vector3(lot.c[0], groundY, lot.c[1]), Math.max(420, tall * 2.2));
+  $('goto').value = String(l);
+}
+lots.map((l, i) => [l.name, i]).sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }))
+  .forEach(([n, i]) => $('goto').add(new Option(n, String(i))));
+$('goto').addEventListener('change', () => {
+  if ($('goto').value === '') return;
+  const l = +$('goto').value; selected = { lot: l }; flyToLot(l); showInfo(selected);
+});
+$('zoomIn').addEventListener('click', () => zoomBy(0.6));
+$('zoomOut').addEventListener('click', () => zoomBy(1 / 0.6));
+$('home').addEventListener('click', () => { $('goto').value = ''; flyTo(HOME.target.clone().setY(groundY), 0, HOME.cam.clone().setY(HOME.cam.y + groundY)); });
 $('infoClose').addEventListener('click', () => { selected = null; $('info').hidden = true; });
 
 function showInfo(sel) {
@@ -382,7 +432,7 @@ function tourGo(i) {
   $('storyTitle').textContent = s.title; $('storyText').textContent = s.text;
   $('storyPrev').disabled = tourAt === 0; $('storyNext').textContent = tourAt === TOUR.length - 1 ? 'Done' : 'Next';
 }
-$('tour').addEventListener('click', () => tourGo(0));
+$('tour').addEventListener('click', () => { closePanels(); tourGo(0); });
 $('storyNext').addEventListener('click', () => (tourAt === TOUR.length - 1 ? ($('story').hidden = true) : tourGo(tourAt + 1)));
 $('storyPrev').addEventListener('click', () => tourGo(tourAt - 1));
 $('storyClose').addEventListener('click', () => ($('story').hidden = true));
@@ -402,7 +452,21 @@ $('pause').addEventListener('click', () => {
   if (!game) return;
   if (!running) { startReplay(view); }           // finished: play again from the whistle
   paused = !paused; $('pause').textContent = paused ? 'Play' : 'Pause';
+  if (!paused) closePanels();                    // playing: give the map the whole screen
 });
+$('watch').addEventListener('click', () => { closePanels(); if (paused) $('pause').click(); });
+
+// ---------- panels: one open at a time, folded back to its icon when done ----------
+function openPanel(name) {
+  document.querySelectorAll('.dock [data-panel]').forEach((b) => {
+    const on = b.dataset.panel === name; b.setAttribute('aria-expanded', String(on)); $('p-' + b.dataset.panel).hidden = !on;
+  });
+}
+function closePanels() { openPanel(null); }
+document.querySelectorAll('.dock [data-panel]').forEach((b) => b.addEventListener('click', () => (b.getAttribute('aria-expanded') === 'true' ? closePanels() : openPanel(b.dataset.panel))));
+document.querySelectorAll('.drawer [data-close]').forEach((b) => b.addEventListener('click', closePanels));
+addEventListener('keydown', (e) => { if (e.key === 'Escape') { closePanels(); $('story').hidden = true; } });
+openPanel('plan');
 $('restart').addEventListener('click', () => startReplay(view));
 $('save').addEventListener('click', () => {
   const r = saveEvent(runs.ours.record);
@@ -420,7 +484,7 @@ addEventListener('resize', resize); resize();
 let last = performance.now(), sinceSample = 0;
 renderer.setAnimationLoop((now) => {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
-  controls.update(); keepAboveGround(dt);
+  stepFly(dt); controls.update(); keepAboveGround(dt);
   if (tiles) {
     camera.updateMatrixWorld(); tiles.update();
     sinceSample += dt; if (sinceSample > 2) { sinceSample = 0; resampleHeights(); }
