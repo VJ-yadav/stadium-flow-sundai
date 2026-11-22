@@ -80,7 +80,8 @@
   .hud { position:fixed; top:12px; right:12px; display:grid; grid-template-columns:repeat(5,auto); gap:4px 18px; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px 16px; font:13px var(--mono); z-index:2 }
   .hud b { font:700 26px var(--display); display:block; color:var(--fg) } .hud span { color:var(--muted) } .hud .red b { color:var(--red) }
   .hud .title { grid-column:1/-1; font:600 15px var(--body); color:var(--amber) }
-  .attr { position:fixed; right:72px; bottom:2px; font-size:11px; color:var(--muted); max-width:46ch; text-align:right; z-index:1 }
+  .hud small { display:block; color:var(--muted); font-size:12.5px; min-height:1.2em }
+  .attr { position:fixed; right:72px; bottom:96px; text-align:right; font-size:11px; color:#c9cfd3; background:var(--panel); border-radius:4px; padding:2px 8px; max-width:46ch; z-index:1 }
 
   .story { position:fixed; left:50%; transform:translateX(-50%); bottom:96px; width:min(620px, calc(100vw - 32px)); background:rgba(12,16,19,.97); border:1px solid var(--amber); border-radius:12px; padding:16px 20px; display:grid; gap:8px; box-shadow:0 10px 36px rgba(0,0,0,.5); z-index:6; box-sizing:border-box; font-size:17px }
   .story[hidden], .info[hidden] { display:none } .story h3 { margin:0; font:700 26px var(--display) } .story p { margin:0 } .story .step { font:500 12.5px var(--mono); color:var(--amber); text-transform:uppercase; letter-spacing:.06em }
@@ -105,11 +106,33 @@
   .info .tag.none { background:rgba(255,255,255,.1); color:var(--muted) } .info button { margin-top:8px }
 
   @media (max-width: 1100px) { .player .speed, .mapctl .hint { display:none } .info { max-height:calc(100% - 124px - 300px) } }
+  /* ---- phone: icons in a top bar, panels as sheets between the bar and the player ---- */
   @media (max-width: 900px) {
-    .dock { flex-direction:row; left:12px; right:12px } .dock .logo { display:none } .dock button { width:auto; flex:1 }
-    .drawer { left:12px; right:12px; width:auto; top:84px; bottom:auto; max-height:calc(100% - 200px) } body.has-player .drawer { bottom:auto }
-    .hud, .attr { display:none } .player { left:12px; max-width:calc(100vw - 24px) } .player .jumps span { display:none }
-    .info { top:84px; max-height:50% } .mapctl select { display:none }
+    html,body { font-size:15px }
+    .dock { flex-direction:row; left:8px; right:8px; top:8px; gap:6px } .dock .logo { display:none }
+    .dock button { width:auto; flex:1; padding:6px 0 4px; font-size:11px } .dock svg.ic { width:20px; height:20px }
+    .drawer { left:8px; right:8px; width:auto; top:66px; bottom:8px; padding:14px 16px 18px; gap:12px; border-radius:12px }
+    body.has-player .drawer { bottom:110px }
+    .drawer header { top:-14px; margin:-14px -16px 0; padding:12px 16px 8px } .drawer header h2 { font-size:24px }
+    .q { font-size:15.5px } .field label, .check { font-size:15px }
+    table { font-size:14px } th, td { padding:6px 0 6px 6px } thead th { font-size:10.5px } tr.key td { font-size:15px } tr.key td.ours { font-size:17px } tr.sub td { font-size:12.5px }
+    small.good { display:block; font-size:11px }
+    .headline, .advice, .why { font-size:14.5px }
+    .hud { top:66px; left:8px; right:auto; grid-template-columns:repeat(3,auto); gap:2px 12px; padding:8px 10px; font-size:11px }
+    .hud b { font-size:20px } .hud .title { font-size:12.5px } .hud small { font-size:10.5px }
+    .hud > div:nth-child(4), .hud > div:nth-child(5) { display:none }
+    .player { left:8px; right:8px; bottom:8px; max-width:none; width:auto; gap:6px; padding:8px; justify-content:space-between }
+    .player .sep, .player .speed, .player .jumps span { display:none }
+    .seg { flex:1 1 100%; grid-template-columns:repeat(3,1fr) } .seg button { padding:8px 4px; font-size:13px }
+    .player .play { min-width:72px; padding:8px 10px } .player #restart { padding:6px 8px }
+    .jumps { flex:1; overflow-x:auto; gap:4px } .jumps button { padding:6px 8px; font-size:12.5px; white-space:nowrap }
+    .mapctl { right:8px } body.has-player .mapctl { bottom:118px } .mapctl select { display:none }
+    .mapctl button { width:40px; height:40px; font-size:19px }
+    .attr { right:56px; bottom:118px; max-width:60vw; font-size:9.5px }
+    .info { left:8px; right:8px; width:auto; top:auto; bottom:118px; max-height:45%; font-size:14.5px; padding:12px 14px }
+    .info h3 { font-size:22px }
+    .story { bottom:118px; width:calc(100vw - 16px); font-size:15px; padding:12px 14px } .story h3 { font-size:21px }
+    .lbl.tower { font-size:11px; padding:2px 5px } .lbl.big { font-size:12px }
   }
 </style>
 </head>
@@ -137,6 +160,7 @@
   <label class="check"><input type="checkbox" id="contra"> <span>Extra northbound lane (contraflow)<br><small class="muted">MassDOT turns one southbound lane northbound for big events.</small></span></label>
   <div class="field"><label for="budget">Card budget <output id="budgetOut"></output></label><input id="budget" type="range" min="5000" max="150000" step="5000" value="50000"><small>Each car in a delayed lot gets one $50 card, so the budget sets how many cars can be held.</small></div>
   <div class="field"><label for="release">Delayed lots open at</label><select id="release"><option value="75" selected>75 min after the game (today's rule)</option><option value="45">45 min</option><option value="60">60 min</option><option value="90">90 min</option><option value="105">105 min</option></select></div>
+  <div class="field"><label for="merge">When Route 1 is full at a lot exit</label><select id="merge"><option value="0">Route 1 cars always go first</option><option value="0.25" selected>Route 1 mostly first (our default)</option><option value="0.5">Lots and Route 1 take turns half the time</option><option value="1">Full zipper: lots get their share</option></select><small>How police and drivers share a full merge. Unknown for Gillette until we see it; it changes how much the jam shortens, not which plan is better.</small></div>
   <button class="primary" id="plan" type="button">Recommend delayed lots</button>
   <div class="bar" aria-hidden="true"><i id="progress"></i></div>
   <p class="muted" id="status" role="status">Uses past games saved in this browser.</p>
@@ -221,10 +245,10 @@
 <div class="hud" aria-live="polite">
   <div class="title" id="hTitle">Our lots</div>
   <div><span>After the game</span><b id="hClock">0 min</b></div>
-  <div><span>Still in lots</span><b id="hLots">0</b></div>
+  <div><span>Waiting at gates</span><b id="hLots" title="Cars with engines running, queued to get out of a lot">0</b><small id="hLotsVs"></small></div>
   <div><span>On Route 1</span><b id="hRoad">0</b></div>
   <div><span>Home</span><b id="hGone">0</b></div>
-  <div class="red"><span>Gates blocked</span><b id="hBlocked">0</b></div>
+  <div class="red"><span>Gates blocked</span><b id="hBlocked">0</b><small id="hBlockedVs"></small></div>
 </div>
 
 <aside class="story" id="story" hidden aria-live="polite">
