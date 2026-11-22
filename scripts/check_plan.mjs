@@ -14,6 +14,9 @@ let t0 = Date.now();
 const p1 = planEvent(net, c, []);
 console.log(`event 1 plan (${Date.now() - t0} ms, ${p1.cars} cars, no cards: avg ${p1.base.avgInCarMin} min, last out ${p1.base.lastOutMin} min)`);
 console.log(' ', row(p1.today)); console.log(' ', row(p1.ours)); console.log('  ours cards:', lots(p1.ours)); p1.why.forEach((w) => console.log('  why:', w));
+console.log(`  avg game end to home: no cards ${p1.base.avgHomeMin} min | today ${p1.today.result.avgHomeMin} | ours ${p1.ours.result.avgHomeMin}`);
+console.log(`  release test (ours picks ${p1.releaseTest.pick} min):`);
+p1.releaseTest.rows.forEach((r) => console.log(`    open card lots at ${String(r.min).padStart(3)} min: saves ${r.carMinSaved.toLocaleString('en-US').padStart(7)} car-min, card holders wait ${r.heldWaitMin} min extra, avg home ${r.avgHomeMin} min`));
 
 const real1 = runEvent(net, c, p1.ours, '2026-11-23-g1');
 const today1 = runEvent(net, c, p1.today, 'today-check');

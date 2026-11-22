@@ -56,19 +56,22 @@ export function crowd(net, c) {
 const gameOpts = (c) => ({ lanesNorth: c.lanesNorth ?? 2, lanesSouth: c.lanesSouth ?? 2, contraflow: !!c.contraflow });
 
 // Plays one game. held: Uint8Array, 1 = this car took a card and leaves at +75 min.
-export function play(net, cr, c, held) {
+export function play(net, cr, c, held, holdMin = HOLD_MIN) {
   const dep = Float32Array.from(cr.base);
-  if (held) for (let k = 0; k < cr.N; k++) if (held[k]) dep[k] = Math.max(dep[k], (HOLD_MIN + cr.walk[k]) * 60);
+  if (held) for (let k = 0; k < cr.N; k++) if (held[k]) dep[k] = Math.max(dep[k], (holdMin + cr.walk[k]) * 60);
   const game = new Game(net, { lot: cr.lot, dir: cr.dir, dep }, gameOpts(c));
   game.runToEnd();
-  let total = 0, last = 0;
+  let total = 0, last = 0, home = 0, extra = 0;
   const cleared = new Float32Array(net.lots.length);
   for (let k = 0; k < cr.N; k++) {
     const o = game.state[k] === 3 ? game.out[k] : game.t;
-    total += o - dep[k]; if (o > last) last = o;
+    total += o - dep[k]; home += o; extra += dep[k] - cr.base[k]; if (o > last) last = o;
     if (o > cleared[cr.lot[k]]) cleared[cr.lot[k]] = o;
   }
-  return { game, dep, totalMin: total / 60, avgInCarMin: cr.N ? total / cr.N / 60 : 0, lastOutMin: last / 60, cleared };
+  const n = cr.N || 1;
+  // totalMin: minutes sitting in a car (lot queue + Route 1), the thing the plan reduces.
+  // avgHomeMin: game end to leaving the map. extraWaitMin: extra minutes card holders stayed.
+  return { game, dep, totalMin: total / 60, avgInCarMin: total / n / 60, avgHomeMin: home / n / 60, extraWaitMin: extra / 60, lastOutMin: last / 60, cleared };
 }
 
 // Car-minutes saved per held car, for each lot x direction group. Cached per conditions.
@@ -145,6 +148,7 @@ function result(net, base, run, h) {
   const spent = takenTotal * CARD_USD, saved = base.totalMin - run.totalMin;
   return {
     avgInCarMin: +run.avgInCarMin.toFixed(1),
+    avgHomeMin: +run.avgHomeMin.toFixed(1),
     lastOutMin: Math.round(run.lastOutMin),
     carMinSaved: Math.round(saved),
     spent,
@@ -180,14 +184,31 @@ export function planEvent(net0, c, records = [], onProgress) {
   const cr = crowd(net, c);
   const { base, values } = groupValues(net, cr, c, onProgress);
   const order = values.map((v, g) => g).filter((g) => values[g] > 0).sort((a, b) => values[b] - values[a]);
-  const mk = (kind, alloc) => {
+  const mk = (kind, alloc, releaseMin) => {
     const h = holders(cr, alloc, (l) => rates[l], 7);
-    const run = play(net, cr, c, h.held);
-    return { kind, budget: c.budget, alloc, cards: cardsByLot(net, alloc), result: result(net, base, run, h) };
+    const run = play(net, cr, c, h.held, releaseMin);
+    return { kind, budget: c.budget, releaseMin, alloc, cards: cardsByLot(net, alloc), result: result(net, base, run, h) };
   };
-  const today = mk('today', todayAlloc(net, cr, c.budget, rates));
-  const ours = mk('ours', allocate(cr, order, rates, c.budget));
-  return { conditions: c, cars: cr.N, base: { avgInCarMin: +base.avgInCarMin.toFixed(1), lastOutMin: Math.round(base.lastOutMin) }, today, ours, why: why(net, records, bel, ours, values, records.length ? groupValues(withExits(net0, net0.lots.map(() => PRIOR_EXIT)), crowd(net0, c), c).values : values), values: groupList(net, cr, values) };
+  const today = mk('today', todayAlloc(net, cr, c.budget, rates), HOLD_MIN);
+  const ourAlloc = allocate(cr, order, rates, c.budget);
+  const releaseTest = testRelease(net, cr, c, base, holders(cr, ourAlloc, (l) => rates[l], 7).held);
+  // Same release time as today unless the operator picks one, so the lot choice is compared fairly.
+  const ours = mk('ours', ourAlloc, c.releaseMin || HOLD_MIN);
+  return { conditions: c, cars: cr.N, base: { avgInCarMin: +base.avgInCarMin.toFixed(1), avgHomeMin: +base.avgHomeMin.toFixed(1), lastOutMin: Math.round(base.lastOutMin) }, today, ours, releaseTest, why: why(net, records, bel, ours, values, records.length ? groupValues(withExits(net0, net0.lots.map(() => PRIOR_EXIT)), crowd(net0, c), c).values : values), values: groupList(net, cr, values) };
+}
+
+// When should the card lots open? Too early and card holders drive into the jam; too late and
+// they wait in the stadium for nothing. Advice: the earliest time that gets 90% of the best saving.
+export const RELEASE_OPTIONS = [30, 45, 60, 75, 90, 105];
+function testRelease(net, cr, c, base, held) {
+  const rows = RELEASE_OPTIONS.map((min) => {
+    const r = play(net, cr, c, held, min);
+    const nHeld = held.reduce((a, b) => a + b, 0) || 1;
+    return { min, carMinSaved: Math.round(base.totalMin - r.totalMin), heldWaitMin: Math.round(r.extraWaitMin / nHeld), avgHomeMin: +r.avgHomeMin.toFixed(1) };
+  });
+  const best = Math.max(...rows.map((r) => r.carMinSaved));
+  const pick = rows.find((r) => r.carMinSaved >= 0.9 * best)?.min ?? HOLD_MIN;
+  return { rows, pick };
 }
 
 // Each lot x direction group with its value, for the UI (ranked, best first).
@@ -201,13 +222,13 @@ export function runEvent(net0, c, plan, id) {
   const net = realNet(net0), cr = crowd(net, c);
   const { base } = groupValues(net, cr, c);
   const h = holders(cr, plan.alloc, (l) => trueTake(net.lots[l].name), 99);
-  const run = play(net, cr, c, h.held);
+  const run = play(net, cr, c, h.held, plan.releaseMin);
   const res = result(net, base, run, h);
   const clearedMin = {}, exitPerMin = gateCounts(net, cr, run.game);
   net.lots.forEach((l, i) => { if (cr.groups[i * 2].length + cr.groups[i * 2 + 1].length) clearedMin[l.name] = Math.round(run.cleared[i] / 60); });
   return {
-    record: { id, venue: 'gillette', conditions: c, plan: { kind: plan.kind, budget: plan.budget, cards: plan.cards }, result: { ...res, clearedMin, exitPerMin } },
-    replay: () => ({ game: new Game(net, { lot: cr.lot, dir: cr.dir, dep: run.dep }, gameOpts(c)), held: h.held, crowd: cr }),
+    record: { id, venue: 'gillette', conditions: c, plan: { kind: plan.kind, budget: plan.budget, releaseMin: plan.releaseMin, cards: plan.cards }, result: { ...res, clearedMin, exitPerMin } },
+    replay: () => ({ game: new Game(net, { lot: cr.lot, dir: cr.dir, dep: run.dep }, gameOpts(c)), held: h.held, crowd: cr, net }),
   };
 }
 
