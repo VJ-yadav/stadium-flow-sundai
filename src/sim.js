@@ -68,6 +68,8 @@ export class Game {
     this.cell = [Array.from({ length: nc }, () => []), Array.from({ length: nc }, () => [])];
     this.lotQ = net.lots.map(() => []);
     this.lotTok = new Float32Array(net.lots.length);
+    // cars a lot releases per step: its own rate if known (cars a minute), else the estimate
+    this.lotRate = Float32Array.from(net.lots, (l) => (l.rate ? l.rate / 60 * DT : LOT_RATE));
     this.flowTok = [new Float32Array(nc + 1), new Float32Array(nc + 1)];
     this.order = Array.from({ length: N }, (_, i) => i).sort((a, b) => cars.dep[a] - cars.dep[b]);
     this.next = 0;
@@ -106,7 +108,7 @@ export class Game {
     }
     // lots release onto their join cell when there is room
     for (let l = 0; l < this.lotQ.length; l++) {
-      const q = this.lotQ[l]; this.lotTok[l] = Math.min(this.lotTok[l] + LOT_RATE, LOT_RATE + 1);
+      const q = this.lotQ[l], r = this.lotRate[l]; this.lotTok[l] = Math.min(this.lotTok[l] + r, r + 1);
       if (!q.length) continue;
       const c = net.lots[l].cell;
       while (q.length && this.lotTok[l] >= 1) {

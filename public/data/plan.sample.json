@@ -1,0 +1,251 @@
+{
+  "conditions": {
+    "cars": 14000,
+    "trains": 3000,
+    "contraflow": false,
+    "budget": 50000
+  },
+  "base": {
+    "avgInCarMin": 53.7,
+    "lastOutMin": 233
+  },
+  "today": {
+    "kind": "today",
+    "budget": 50000,
+    "cards": {
+      "Lot 55": 750
+    },
+    "result": {
+      "avgInCarMin": 52.2,
+      "lastOutMin": 233,
+      "carMinSaved": 21009,
+      "spent": 17450,
+      "perThousand": 1204,
+      "offered": {
+        "Lot 55": 750
+      },
+      "taken": {
+        "Lot 55": 349
+      }
+    }
+  },
+  "ours": {
+    "kind": "ours",
+    "budget": 50000,
+    "cards": {
+      "Parking Lot 7A": 25,
+      "Lot 14": 87,
+      "Lot 50B": 135,
+      "Parking Lot 6B": 64,
+      "Lot 15": 105,
+      "Unnamed lot 29": 31,
+      "Lot 52": 156,
+      "Unnamed lot 26": 47,
+      "Unnamed lot 34": 13,
+      "Unnamed lot 14": 122,
+      "Unnamed lot 30": 26,
+      "Unnamed lot 32": 20,
+      "Unnamed lot 24": 69,
+      "Unnamed lot 21": 74,
+      "Unnamed lot 31": 20,
+      "Unnamed lot 33": 6
+    },
+    "result": {
+      "avgInCarMin": 46.7,
+      "lastOutMin": 239,
+      "carMinSaved": 93282,
+      "spent": 47950,
+      "perThousand": 1945,
+      "offered": {
+        "Lot 52": 312,
+        "Lot 50B": 270,
+        "Unnamed lot 14": 244,
+        "Lot 15": 210,
+        "Lot 14": 174,
+        "Unnamed lot 21": 148,
+        "Parking Lot 6B": 128,
+        "Unnamed lot 24": 138,
+        "Parking Lot 7A": 89,
+        "Unnamed lot 26": 94,
+        "Unnamed lot 29": 62,
+        "Unnamed lot 30": 62,
+        "Unnamed lot 31": 42,
+        "Unnamed lot 32": 48,
+        "Unnamed lot 33": 21,
+        "Unnamed lot 34": 34
+      },
+      "taken": {
+        "Lot 52": 156,
+        "Lot 50B": 125,
+        "Unnamed lot 14": 122,
+        "Lot 15": 104,
+        "Lot 14": 76,
+        "Unnamed lot 21": 74,
+        "Parking Lot 6B": 61,
+        "Unnamed lot 24": 69,
+        "Parking Lot 7A": 21,
+        "Unnamed lot 26": 46,
+        "Unnamed lot 29": 27,
+        "Unnamed lot 30": 26,
+        "Unnamed lot 31": 19,
+        "Unnamed lot 32": 15,
+        "Unnamed lot 33": 5,
+        "Unnamed lot 34": 13
+      }
+    }
+  },
+  "why": [
+    "Lot 41: Last game its gates let out about 6 cars a minute (we had assumed 15). Holding one car there now saves about 92 minutes of driving in total, down from 101. So 189 fewer cards ($9,450).",
+    "Lot 52: Last game its gates let out about 6 cars a minute (we had assumed 15). Holding one car there now saves about 103 minutes of driving in total, up from 76. So 156 more cards ($7,800).",
+    "Lot 50B: Last game its gates let out about 8 cars a minute (we had assumed 15). Holding one car there now saves about 107 minutes of driving in total, up from 86. So 135 more cards ($6,750)."
+  ],
+  "records": [
+    {
+      "id": "2026-11-23-g1",
+      "venue": "gillette",
+      "conditions": {
+        "cars": 14000,
+        "trains": 3000,
+        "contraflow": false,
+        "budget": 50000
+      },
+      "plan": {
+        "kind": "ours",
+        "budget": 50000,
+        "cards": {
+          "Unnamed lot 29": 31,
+          "Parking Lot 2": 37,
+          "Parking Lot 5B": 41,
+          "Unnamed lot 33": 22,
+          "Unnamed lot 31": 21,
+          "Parking Lot 7A": 46,
+          "Unnamed lot 24": 69,
+          "Lot 41": 189,
+          "Lot 14": 87,
+          "Unnamed lot 34": 17,
+          "Unnamed lot 30": 31,
+          "Lot 15": 105,
+          "Unnamed lot 14": 122,
+          "Unnamed lot 32": 24,
+          "Lot 40": 131,
+          "Unnamed lot 26": 27
+        }
+      },
+      "result": {
+        "avgInCarMin": 47.4,
+        "lastOutMin": 239,
+        "carMinSaved": 84696,
+        "spent": 45000,
+        "perThousand": 1882,
+        "offered": {
+          "Lot 41": 378,
+          "Lot 40": 262,
+          "Unnamed lot 14": 244,
+          "Lot 15": 210,
+          "Lot 14": 174,
+          "Unnamed lot 24": 138,
+          "Parking Lot 7A": 92,
+          "Unnamed lot 26": 54,
+          "Parking Lot 5B": 82,
+          "Parking Lot 2": 74,
+          "Unnamed lot 29": 62,
+          "Unnamed lot 30": 62,
+          "Unnamed lot 31": 42,
+          "Unnamed lot 32": 48,
+          "Unnamed lot 33": 44,
+          "Unnamed lot 34": 34
+        },
+        "taken": {
+          "Lot 41": 158,
+          "Lot 40": 108,
+          "Unnamed lot 14": 122,
+          "Lot 15": 105,
+          "Lot 14": 87,
+          "Unnamed lot 24": 69,
+          "Parking Lot 7A": 26,
+          "Unnamed lot 26": 27,
+          "Parking Lot 5B": 38,
+          "Parking Lot 2": 37,
+          "Unnamed lot 29": 31,
+          "Unnamed lot 30": 26,
+          "Unnamed lot 31": 20,
+          "Unnamed lot 32": 20,
+          "Unnamed lot 33": 13,
+          "Unnamed lot 34": 13
+        },
+        "clearedMin": {
+          "Lot 42": 239,
+          "Lot 50A": 154,
+          "Parking Lot 3B": 133,
+          "Lot 55": 193,
+          "Lot 51": 155,
+          "Lot 20": 108,
+          "Lot 41": 115,
+          "Lot 54A": 163,
+          "Parking Lot 5A": 108,
+          "Lot 52": 125,
+          "Unnamed lot 11": 106,
+          "Lot 50B": 107,
+          "Lot 40": 107,
+          "Unnamed lot 14": 106,
+          "Lot 15": 108,
+          "Lot 16": 108,
+          "Parking Lot 6A": 107,
+          "Parking Lot 4C": 117,
+          "Lot 14": 107,
+          "Lot 54B": 108,
+          "Unnamed lot 21": 108,
+          "Parking Lot 6B": 106,
+          "Lot 33": 121,
+          "Unnamed lot 24": 107,
+          "Parking Lot 7A": 105,
+          "Unnamed lot 26": 108,
+          "Parking Lot 5B": 105,
+          "Parking Lot 2": 112,
+          "Unnamed lot 29": 107,
+          "Unnamed lot 30": 100,
+          "Unnamed lot 31": 108,
+          "Unnamed lot 32": 108,
+          "Unnamed lot 33": 106,
+          "Unnamed lot 34": 123
+        },
+        "exitPerMin": {
+          "Lot 42": 6,
+          "Lot 50A": 8,
+          "Parking Lot 3B": 18,
+          "Lot 55": 6,
+          "Lot 51": 6,
+          "Lot 20": 14,
+          "Lot 41": 6,
+          "Lot 54A": 6,
+          "Parking Lot 5A": 14,
+          "Lot 52": 6,
+          "Unnamed lot 11": 11,
+          "Lot 50B": 8,
+          "Lot 40": 23.6,
+          "Unnamed lot 14": 11,
+          "Lot 15": 14,
+          "Lot 16": 14,
+          "Parking Lot 6A": 17,
+          "Parking Lot 4C": 12.2,
+          "Lot 14": 14,
+          "Lot 54B": 7,
+          "Unnamed lot 21": 11,
+          "Parking Lot 6B": 15.6,
+          "Lot 33": 24,
+          "Unnamed lot 24": 10.8,
+          "Parking Lot 7A": 8.4,
+          "Unnamed lot 26": 9.8,
+          "Parking Lot 5B": 12.8,
+          "Parking Lot 2": 16.8,
+          "Unnamed lot 29": 8.4,
+          "Unnamed lot 30": 8.2,
+          "Unnamed lot 31": 5.8,
+          "Unnamed lot 32": 6,
+          "Unnamed lot 33": 5,
+          "Unnamed lot 34": 10.4
+        }
+      }
+    }
+  ]
+}

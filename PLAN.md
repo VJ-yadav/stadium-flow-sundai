@@ -1,177 +1,210 @@
 # Today's plan: Stadium Flow at Sundai Hack 150
 
-Demos at 20:00. Feature freeze 18:30. Read this first, then [README.md](README.md) for the full
-background.
+Demos at 20:00. Feature freeze 18:30. Read this first; [README.md](README.md) has more background.
 
-## Scope in one line
+## What we're building, in plain words
 
-**A planning tool for Gillette's event operators:** before each game it says which lots should
-get the $50 delayed-release cards for a given budget, and after each game it saves what happened,
-so the next plan is better.
+After a Patriots game, about 13,000 cars try to leave Gillette at once, and there is one road out:
+Route 1. The road can only take so many cars a minute, so people sit in the parking lots for an
+hour or more.
 
-- **The user is the operator:** stadium event operations, with Foxborough police and MassDOT.
-- **Not in scope today:** a fan app, fan accounts, or personal offers.
-- **The memory holds counts per lot,** no personal data.
+The stadium already does one smart thing: it pays **$50 to drivers in one lot who agree to leave
+75 minutes after the game**. Fewer cars at the whistle means the rest get out faster. But it's
+always the same lot, and nobody checks whether that lot is the best place to spend the money.
 
-## The operator's problem
+**We're building a planning tool for the people who run game-day traffic.** Before a game it
+answers one question:
 
-- Route 1 is the only road out. Two lanes north clear about 3,600 cars an hour, so 14,000 cars
-  take more than two hours whatever we do.
-- The stadium already pays $50 per car for some lots to leave about 75 minutes late. **The lots
-  that get the cards are fixed**, and nobody measures whether they are the right lots for the money.
-- After each game the operator knows how many cards each lot took. Nothing turns that into a
-  better plan next time.
+> "We have $50,000 for cards. Which lots should get them?"
 
-## What we give the operator
+After the game, it saves what happened, so the next answer is better.
 
-1. **Conditions in:** expected cars, fans on trains, contraflow yes or no, and the card budget.
-2. **Two plans out, on the same Route 1 model and the same budget:**
-   - **Today's plan:** the fixed delayed-release lot. In our data that is Lot 55, standing in for
-     the stadium's Lots 45 and 55B, which aren't named in OpenStreetMap.
-   - **Our plan:** the lots ranked by how much road their waiting frees.
-3. **Three numbers for each plan:**
-   - average minutes in the car,
-   - when the last car leaves the lots,
-   - **car-minutes saved per $1,000** of cards.
-4. **3D playback** of either plan on the real map.
-5. **After the game,** a record of the event is saved to localmem.
-6. **Next game,** the plan reads the records and says what changed and why.
+**Not today:** a fan app, fan accounts, payments, or the localmem API. Memory is kept in the
+browser (see "Memory" below).
 
-**Car-minutes saved** means the waiting removed, added up over all cars. If 1,000 cars each wait
-10 minutes less, that is 10,000 car-minutes saved.
+## How it works
 
-## Three goals for 19:00
+### 1. Before the game: the operator enters the event
 
-1. **Our plan beats today's plan.** Both columns fill in after one click, for the same budget.
-2. **You can see why.** In 3D, today's plan leaves the lots full and Route 1 backed up, while
-   ours holds back the right lots and the road keeps moving. A 20-second clip should make the
-   point on its own.
-3. **Event 2 is smarter than event 1.** The event 2 plan changes because of event 1's record, and
-   the screen shows which record. For example: "Lot 42 took only 30% of its cards, so $8,000 moved
-   to Lot 15."
+Expected cars, fans on trains, contraflow lane yes or no, and the card budget.
 
-Sundai also requires that the app reacts to input, and that we hand in a public link, this repo
-and a screen recording.
+### 2. The tool compares two plans on a model of the real Route 1
+
+- **Today's plan:** cards go to the one fixed lot. In our map data that is Lot 55, standing in
+  for the stadium's Lots 45 and 55B, which aren't named in OpenStreetMap.
+- **Our plan:** for every lot, and each direction (north to I-95, south to I-495), the model asks:
+  *"if 100 cars from here leave 75 minutes later, how many minutes of driving does everyone
+  save?"* The cards go to the lots where that number is highest.
+
+For each plan it shows:
+- **Average time in the car**, from the moment you get to your car until you're out on the highway.
+- **When the last car leaves.**
+- **Minutes saved per $1,000:** the time in the car we remove, added up over every car, for each
+  $1,000 of cards. This is the one number that says which plan uses the money better.
+
+### 3. The game is played
+
+The model plays the game with the plan the operator picked. In the demo, the model also plays the
+part of the real world (see "Realistic assumptions").
+
+### 4. After the game: the tool saves what happened
+
+It records, per lot:
+- how many cards were offered and how many were taken,
+- **how many cars a minute actually got out of each lot's gates.** Parking staff or a gate counter
+  can count this.
+
+### 5. Next game: the plan uses what was saved
+
+The biggest unknown is how fast each lot really empties. Some lots have one narrow exit; some have
+three. We start by assuming 15 cars a minute for every lot. After one game, the counts show the
+real speeds, and the plan changes. The screen says what changed and why, for example:
+
+> Lot 52: last game its gates let out about 6 cars a minute (we had assumed 15). Holding one car
+> there now saves about 103 minutes of driving in total, up from 76. So 156 more cards ($7,800).
+
+## Does it actually help? What the model says (run `node scripts/check_plan.mjs`)
+
+13,280 cars (14,000 minus 3,000 fans on trains), two lanes north, $50,000 budget:
+
+| | Avg time in car | Minutes saved per $1,000 |
+|---|---|---|
+| No cards at all | 54 min | n/a |
+| Today's plan (one fixed lot) | 52 min | 1,268 |
+| Our plan, first game (no history yet) | 47 min | 1,882 |
+| Our plan, second game (after learning gate speeds) | 47 min | 1,984 |
+
+**What that means in plain terms:**
+1. **Spending the cards on the right lots saves about 50% more driving time per dollar** than the
+   fixed lot.
+2. **Memory adds about 5% more** after one game, and **the forecast becomes accurate.** Game 1's
+   plan predicted 43.7 minutes and the real game gave 47.4. Game 2 predicted 46.7 and got 46.6.
+   An operator can trust the plan's numbers.
+3. **The last car still leaves 2 to 4 hours after the game.** No plan widens the road. What
+   changes is how many people spend that time sitting in a car with the engine running.
+
+These numbers come from our model with made-up lot speeds, not from real Gillette data. The model
+is the tool; the real numbers need the stadium's counts.
+
+## Realistic assumptions (said out loud in the demo)
+
+| Assumption | Value | Why we think it's fair |
+|---|---|---|
+| Road capacity | 1,800 cars per lane per hour | The standard figure traffic engineers use |
+| Lot gates | **6 to 24 cars a minute, different per lot**, unknown to the plan at first | Lots differ in exits and staff; we have no real counts |
+| Share who take the card | **20% to 80%, different per lot** | Gillette says 1,000+ cars a game use its delayed lot |
+| Heading north | 60% | Estimate; I-95 north to Boston is the bigger flow |
+| Cars | 14,000 minus about 1,200 per 5,000 train riders | Lot area estimate; the train figure is from Foxborough police |
+| When people leave | 55% within 15 min of the end, the rest spread over 90 min | Estimate |
+
+The "real" lot speeds and take rates are hidden in the code (`trueExit`, `trueTake` in
+`src/plan.js`). The plan never reads them. It only learns from saved game records, the same way it
+would at the real stadium.
+
+## Why 3D? What it should show
+
+A map that just looks real isn't enough. Think of a 3D cutaway of an engine: it's useful because
+it shows **the part that's failing and why**. Our 3D view should do the same for the exit:
+
+1. **Lots as tanks.** A column over each lot, as tall as the number of cars still inside. You see
+   which lots drain and which stay full.
+2. **The road as a queue.** Route 1 coloured, or raised, by how packed each stretch is. You watch
+   the jam start at the merge and grow back toward the lots.
+3. **The broken part: blocked gates.** When the road next to a lot's exit is full, that gate can't
+   let anyone out. Show it as a red ring on the exit. This is the real cause of the hour in the
+   lot: not the lot, but the road backing up into it.
+4. **Card holders in their own colour.** They stay parked, then leave at +75 minutes onto a road
+   that's moving.
+5. **Today vs ours on the same clock.** One switch replays either plan, so you see fewer red rings
+   and shorter queues with ours.
+
+That is what the 20-second clip should show: **in today's plan the gates by the merge go red and
+stay red; in ours, the cards empty out exactly those spots.**
+
+## Memory (local for now)
+
+- A game record is saved in the browser (`src/memory.js`: `listEvents`, `saveEvent`,
+  `exportEvents`, `importEvents`).
+- Records are counts per lot: no names, plates or phones.
+- Export and import a JSON file so the demo can start from a known history.
+- Later, the same records can move to a memory service such as localmem. Nothing else changes.
+
+## How the pieces connect (for Maggie and Sid)
+
+```js
+import { buildNet, planEvent, runEvent } from './plan.js';
+import { listEvents, saveEvent } from './memory.js';
+
+const net = buildNet(data);                         // data = public/data/foxborough.json
+const conditions = { cars: 14000, trains: 3000, contraflow: false, budget: 50000 };
+
+const plan = planEvent(net, conditions, listEvents()); // takes 4 to 10 s: show "Planning..."
+// plan.today / plan.ours: { kind, budget, cards: { 'Lot 52': 156, ... }, result: {...} }
+// plan.ours.result: { avgInCarMin, lastOutMin, carMinSaved, spent, perThousand, offered, taken }
+// plan.why: [ 'Lot 52: last game its gates let out about 6 cars a minute ...' ]
+// plan.values: [{ lot, dir, cars, value }] every group ranked, best first
+
+const { record, replay } = runEvent(net, conditions, plan.ours, 'game-2');
+saveEvent(record);                                  // record.result.exitPerMin = gate counts
+const { game, held, crowd } = replay();             // a fresh Game to step for the 3D view
+// game.step() moves 3 s; game.state[i]: 0 parked, 1 waiting in lot, 2 on Route 1, 3 gone
+// game.cell[dir][c].length = cars in road cell c; game.lotQ[l].length = cars queued at lot l
+// held[i] = 1 if car i took a card; crowd.lot[i] = its lot
+```
+
+There's a sample output to build the screen against before wiring it up:
+`public/data/plan.sample.json`.
 
 ## Who does what
 
 | | Owns | Files |
 |---|---|---|
-| **Vijay** | The model and the plan logic, data checks, the demo script, the recording, submission, and the Google key | `src/plan.js`, `src/sim.js`, `scripts/` |
-| **Maggie** (`hello-magnolia`) | The operator screen: panel, results, 3D playback, memory panel | `index.html`, `src/main.js`, `src/ui/` |
-| **Sid** (`siddhrajp`) | Memory and backend: the events API, localmem, deploy | `api/`, `server/`, `vercel.json` |
+| **Vijay** | Plan logic (done: `src/plan.js`), wiring it into the page, numbers, demo script, recording, submission, Google key | `src/plan.js`, `src/sim.js`, `scripts/` |
+| **Maggie** (`hello-magnolia`) | The operator screen: event inputs, the two-plan table, the "why" lines, past games | `index.html`, `src/ui/` |
+| **Sid** (`siddhrajp`) | The 3D "what's going on" layers, the Today/Ours replay, deploy | `src/main.js`, `src/layers/` |
 
-Owning a file means you merge changes to it; ask before editing someone else's. Maggie and Sid
-can swap roles if they'd rather.
-
-## The contracts (agree these at 11:45, then everyone works in parallel)
-
-### 1. A plan (from `src/plan.js`, read by the UI)
-
-```js
-// planEvent(net, conditions, records) -> { today, ours, why }
-conditions = { cars: 14000, trains: 3000, contraflow: false, budget: 50000 }
-
-plan = {
-  kind: 'today' | 'ours',
-  budget: 50000,
-  cards: { 'Lot 15': 400, 'Lot 42': 250, ... },   // cards offered per lot ($50 each)
-  result: {
-    avgInCarMin: 51.2,        // average minutes in the car
-    lastOutMin: 175,          // minutes after the game the last car leaves the lots
-    carMinSaved: 61000,       // vs no cards at all
-    perThousand: 1220         // carMinSaved / (cards taken × $50 / 1000)
-  }
-}
-
-why = ["Lot 42 took 30% of its cards last game (record 2026-11-23-g1), so $8,000 moved to Lot 15"]
-```
-
-Until `plan.js` lands, the UI uses a fixture: `public/data/plan.sample.json` (Vijay commits it
-by 12:15).
-
-### 2. An event record (saved after each game, read before the next)
-
-```json
-{
-  "id": "2026-11-23-g1",
-  "venue": "gillette",
-  "conditions": { "cars": 14000, "trains": 3000, "contraflow": false, "weather": "clear" },
-  "plan": { "kind": "ours", "budget": 50000, "cards": { "Lot 15": 400, "Lot 42": 250 } },
-  "result": {
-    "taken": { "Lot 15": 310, "Lot 42": 75 },
-    "clearedMin": { "Lot 15": 128, "Lot 42": 96 },
-    "avgInCarMin": 44.0,
-    "lastOutMin": 171
-  }
-}
-```
-
-In the demo, "taken" comes from the model: each lot has a hidden real take rate, so event 1
-produces counts that the plan for event 2 can learn from.
-
-### 3. The events API (Sid's server, called by the page)
-
-| Call | Does |
-|---|---|
-| `POST /api/events` with an event record | Saves it to localmem, returns `{ ok, id }` |
-| `GET /api/events?venue=gillette` | Returns past records, newest first |
-
-The localmem key lives **only in the server's environment**, never in the page or the repo. If
-localmem can't be reached, the server falls back to a local JSON file and the response says
-`"memory": "offline"`, so the UI can show it.
+Owning a file means you merge changes to it; ask before editing someone else's. Swap if you prefer.
 
 ## Maggie's tasks: the operator screen
 
-The current left panel has sliders and a "Run game" button (`index.html`, `startGame()` in
-`src/main.js`). It turns into the operator's planning screen.
+| By | Task | Done when |
+|---|---|---|
+| 11:45 | Run the app (`npm install`, `npm run dev`, key line in `.env.local`); read this file and `plan.sample.json` | Gillette on your screen |
+| 13:00 | **Event panel:** cars, fans on trains, contraflow, budget ($0 to $100,000 in $5,000 steps, showing "= N cards"), and a **Plan game** button. Replace the old sliders | The inputs make a `conditions` object |
+| 14:00 | **Two-plan table** from `plan.sample.json`: columns Today and Ours; rows avg time in car, last car out, minutes saved per $1,000, money spent; under it the top lots getting cards | It reads well to someone who's never seen it |
+| 15:00 | **Wire it up:** call `planEvent` on click with "Planning..." while it runs (or move it to a Web Worker), then fill the table with live numbers | Changing the budget changes the table |
+| 16:00 | **Past games:** a "Play game and save" button (`runEvent` + `saveEvent`), the list of past games from `listEvents()`, the `why` lines under the table, and "Reset history" | Plan, play and save, plan again: the why lines appear |
+| 17:00 | Polish: phone width, plain labels, the assumptions in one "How this works" popover | Works at 390 px wide |
+
+## Sid's tasks: the 3D layers and deploy
 
 | By | Task | Done when |
 |---|---|---|
-| 11:30 | `npm install` and `npm run dev`; put the key line in `.env.local`; read `src/main.js` (`startGame`, `drawCars`, `finishGame`) | Photoreal Gillette on your laptop |
-| 13:00 | **Panel:** an "Event" group (cars, fans on trains, contraflow) and a "Budget" slider ($0 to $100,000 in $5,000 steps, showing the card count, budget ÷ 50), then a **Plan event** button. Fill it from `plan.sample.json` first | Clicking Plan event shows a table with the two plans as columns and the three numbers as rows |
-| 15:00 | **3D playback:** a Today / Ours switch that replays that plan. Lots with cards get an outline and a label ("Lot 15 · 400 cards"); held cars get their own colour until they leave at +75 min | Switching plans and replaying shows the difference on the map |
-| 16:00 | **Memory panel:** after a game, a **Save event** button (calls `POST /api/events`); a list of past events from `GET /api/events`; the `why` lines under the plan table, each linked to its record; an "offline" badge when the API says so | Plan, save, plan again: the second plan shows a "what changed" line |
-| 17:00 | **Polish:** a fly-in camera on load, readable at phone width, no overlapping panels | Looks right at 1440 px and 390 px wide |
-
-Tips:
-- Keep the three.js scene as it is. Your work is mostly the DOM panel, and colouring and labelling
-  lots that already exist (`data.lots`, each with `name`, `c` as its centre and `p` as its outline).
-- `CSS2DObject` labels are already used (`label()` in `main.js`).
-
-## Sid's tasks: memory and backend
-
-| By | Task | Done when |
-|---|---|---|
-| 11:30 | Run the app; read the [localmem quickstart](https://localmem.org/docs/memory-api/quickstart.md) and [SDKs](https://localmem.org/docs/memory-api/sdks.md); get the key from Vijay by private message | You understand write and recall in the SDK |
-| 12:30 | **API skeleton:** `api/events.js` as a Vercel function (or a small Node server that Vite proxies `/api` to), with POST and GET backed by a JSON file. Commit early so Maggie can call it | `curl` POST, then GET, returns the record |
-| 13:00 | **localmem:** `npm i @localmem/memory`; on POST, write the record (one memory per event, about "gillette events"); on GET, recall them and return the JSON. Key from `process.env` only | One test record written to localmem and read back |
-| 16:00 | **In the loop:** check that the plan really reads the records. Add an "offline" fallback to the local file when localmem fails or is slow (over 3 seconds) | Event 2's plan changes after event 1 is saved, and still works with the network off |
-| 17:30 | **Deploy** to Vercel: environment variables set, the Maps key line set as `VITE_GOOGLE_MAPS_KEY`; send Vijay the domain so he can allow it on the Google key | The public link works on a phone |
-
-Rules for the backend:
-- Never log or return the localmem key.
-- Validate the POST body: known fields only, numbers as numbers, at most 50 KB.
+| 11:45 | Run the app; read `src/main.js` (`startGame`, `drawCars`, `finishGame`) and the `Game` class in `src/sim.js` | You can explain how a car moves from lot to road |
+| 13:00 | **Lots as tanks:** a column per lot (`data.lots[i].c` is its centre), height = cars still inside, updated each frame | Columns shrink as lots empty |
+| 14:00 | **Road as a queue:** colour or raise Route 1 cells by `game.cell[dir][c].length` (packed = red) | You see the jam grow back from the merge |
+| 15:00 | **Blocked gates:** a red ring on a lot exit when its road cell (`net.lots[l].cell`) is full and the lot still has cars waiting | Red rings appear near the merge at the whistle |
+| 16:00 | **Card holders and replay:** held cars in their own colour; a Today/Ours switch that replays either plan from `runEvent(...).replay()` | Switching plans shows fewer red rings with ours |
+| 17:30 | **Deploy** to Vercel or Netlify (a static site, no server), with `VITE_GOOGLE_MAPS_KEY` set in the host; send Vijay the domain for the Google key | The public link works on a phone |
 
 ## Vijay's tasks
 
 | By | Task |
 |---|---|
-| 12:15 | Commit `public/data/plan.sample.json` for the UI |
-| 13:00 | `src/plan.js`: groups (lot × direction), value of 100 cars waiting 75 min, take rates (hidden real rates in the model, learned rates from records), ranking, budget fill; a headless check prints today vs ours |
-| 16:00 | `why` lines from the records; event 2 changes because of event 1 |
-| 17:30 | Add the deploy domain to the Google key's allowed sites |
-| 18:45 | Check every number on screen against its source or label it an estimate; demo script; recording; submission |
+| Done | `src/plan.js`, `src/memory.js`, `scripts/check_plan.mjs`, `plan.sample.json` |
+| 13:00 | Help Maggie and Sid wire in; keep `planEvent` under 10 s (Web Worker if needed) |
+| 15:00 | A "start from history" JSON with two past games for the demo |
+| 17:30 | Add the deploy domain to the Google key |
+| 18:45 | Check every number on screen; demo script; recording; submission |
 
 ## The day
 
 | Time | Milestone |
 |---|---|
-| 11:30 | Everyone running on their own laptop |
-| 11:45 | Contracts above agreed (15 minutes, all three) |
-| 13:00 | M1: plan logic headless, API round-trip, panel on the fixture. Lunch |
-| 15:00 | M2: the real plan on screen, playback of both plans |
-| 16:00 | M3: memory in the loop (save, then plan again, and it changes) |
+| 11:45 | Everyone running, this file read |
+| 13:00 | M1: event panel, lot tanks |
+| 15:00 | M2: live table, road queue, blocked gates |
+| 16:00 | M3: save a game, plan again, why lines; Today/Ours replay |
 | 17:30 | M4: public link |
 | 18:30 | Feature freeze, fixes only |
 | 18:45 | Recording |
@@ -180,26 +213,25 @@ Rules for the backend:
 
 ## The 3-minute demo
 
-| At | What happens on screen |
+| At | On screen |
 |---|---|
-| 0:00 | Fly in over Gillette: "One road out. 14,000 cars. You run game-day traffic." |
-| 0:30 | Enter tonight's event with a $50,000 budget, then Plan event. Two columns: today's lot vs ours |
-| 1:15 | Play today's plan, then ours. Point at Route 1 and the lots. Read car-minutes saved per $1,000 |
-| 2:00 | Save the event. Plan the next game: the plan changes, with "Lot 42 took only 30%, $8,000 moved to Lot 15" |
-| 2:40 | "Any venue with one road out. We want one operator to try it on a real game." |
+| 0:00 | Gillette in 3D. "One road out. 13,000 cars. You run game-day traffic, and you have $50,000 for cards." |
+| 0:30 | Plan game. Today's lot vs ours: minutes saved per $1,000, 1,268 vs 1,882 |
+| 1:00 | Replay today's plan: red rings at the gates by the merge, a long queue on Route 1. Switch to ours: the cards empty exactly those spots |
+| 1:45 | Play and save. Plan the next game: "Lot 52's gates let out 6 cars a minute, not 15, so 156 more cards there." 1,984 per $1,000, and the forecast now matches what happens |
+| 2:30 | "This needs one thing from a real stadium: gate counts per lot. We want one operator to try it for a season." |
 
 ## Team rules
 
-- No keys in the repo, ever. The Maps key line is shared by private message; the localmem key
-  lives only in the server environment.
+- No keys in the repo. The Google key line is shared by private message.
 - Small commits to `main`, pull before you push, and say in the chat what you're starting.
-- Every number on screen is either sourced or labelled an estimate.
-- If a milestone slips 30 minutes, cut scope, not the demo. Cut in this order: fly-in, the memory
-  list (keep the `why` line), the phone layout.
+- Plain words on screen. Every number is either sourced or labelled an estimate.
+- If a milestone slips 30 minutes, cut scope, not the demo. Cut in this order: phone polish, the
+  past-games list (keep the why lines), the road colours (keep the red rings).
 
 ## If something breaks
 
 - **Google tiles fail on the venue wifi:** the OpenStreetMap model loads on its own.
-- **localmem can't be reached:** the local file fallback, with "memory offline" on screen.
-- **Our plan doesn't beat today's:** say so on stage, and show which lots gave the most. That is
-  still a result.
+- **`planEvent` is too slow on a laptop:** use a smaller budget step, or a cached `plan.sample.json`.
+- **Our plan doesn't win on some setting:** say so, and show which lots mattered. That's still a
+  result.
