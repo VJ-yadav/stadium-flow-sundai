@@ -197,6 +197,8 @@ const HIDE = new THREE.Matrix4().makeScale(0, 0, 0);
 let conditions = null, lastPlan = null, runs = null, view = 'ours';
 let game = null, held = null, cr = null, running = false, paused = false, simAcc = 0;
 let cardLabels = [];
+// The plan we compare against, played on the same clock but not drawn: Ours vs Today, others vs Ours.
+let ghost = null, ghostKind = null;
 const gameOpts = (c) => ({ lanesNorth: 2, lanesSouth: 2, contraflow: !!c.contraflow });
 const REAL = realNet(net);
 
@@ -208,6 +210,8 @@ function startReplay(kind) {
   game = new Game(REAL, { lot: cr.lot, dir: cr.dir, dep: r.dep }, gameOpts(conditions));
   // Start paused at the whistle so the screen can be explained before anything moves.
   held = r.held; running = true; paused = true; simAcc = 0;
+  ghostKind = kind === 'ours' ? 'today' : 'ours';
+  ghost = new Game(REAL, { lot: cr.lot, dir: cr.dir, dep: runs[ghostKind].dep }, gameOpts(conditions));
   $('pause').textContent = 'Play';
   document.querySelectorAll('.seg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.kind === kind)));
   $('hTitle').textContent = { none: 'No cards', today: "Today's lot (Lot 55)", ours: 'Our lots' }[kind] + (kind === 'none' ? '' : ` · card lots open at ${r.record.plan.releaseMin} min`);
@@ -215,11 +219,31 @@ function startReplay(kind) {
   if (selected) showInfo(selected);
 }
 
+// Advance the shown plan and the comparison plan together.
+function stepBoth() {
+  const done = game.step();
+  if (ghost && !ghost.done) ghost.done = ghost.step();
+  return done;
+}
+// A gate is blocked when cars are queued at it and the Route 1 stretch it joins is full.
+function gateBlocked(g, l) {
+  const q = g.lotQ[l]; if (!q.length) return false;
+  const d = cr.dir[q[0]];
+  return g.cell[d][lots[l].cell].length >= JAM * g.lanes[d];
+}
+// Cars queued at a gate with the engine running (card holders parked on purpose don't count).
+function tally(g) {
+  let waiting = 0, blocked = 0;
+  for (let i = 0; i < g.N; i++) if (g.state[i] === 1) waiting++;
+  for (let l = 0; l < lots.length; l++) if (gateBlocked(g, l)) blocked++;
+  return { waiting, blocked };
+}
+
 // Move the replay to a minute after the game (replaying from the whistle if going back).
 function seekTo(min) {
   if (!runs) return;
   if (!game || game.t > min * 60) startReplay(view);
-  while (game.t < min * 60) if (game.step()) break;
+  while (game.t < min * 60) if (stepBoth()) break;
   paused = true; $('pause').textContent = 'Play';
   if (selected) showInfo(selected);
 }
@@ -241,13 +265,13 @@ function drawLayers() {
     else if (held[i] && game.t > (cr.base[i] - 1)) counts[l][1]++;   // past when it would have left: staying for the card
     else counts[l][2]++;
   }
-  let inLots = 0, onRoad = 0, blocked = 0;
+  let queued = 0, onRoad = 0, blocked = 0;
   const updLabels = (labelTick = (labelTick + 1) % 10) === 0;
   lastCounts = counts; lastCounts.blocked = [];
   lots.forEach((lot, l) => {
     let y = 0.6 + lotY[l];
     for (let s = 0; s < 3; s++) {
-      const h = counts[l][s] * PER_CAR_M; inLots += counts[l][s];
+      const h = counts[l][s] * PER_CAR_M; if (s === 0) queued += counts[l][s];
       if (h <= 0.01) { colMesh.setMatrixAt(l * 3 + s, HIDE); continue; }
       M.compose(P.set(lot.c[0], y, lot.c[1]), Q.identity(), S.set(colW[l], h, colW[l]));
       colMesh.setMatrixAt(l * 3 + s, M); colMesh.setColorAt(l * 3 + s, SEG[s]); y += h;
@@ -288,7 +312,12 @@ function drawLayers() {
   roadMesh.instanceMatrix.needsUpdate = true; if (roadMesh.instanceColor) roadMesh.instanceColor.needsUpdate = true;
   ringMesh.instanceMatrix.needsUpdate = true; linkGeo.attributes.position.needsUpdate = true;
   $('hClock').textContent = Math.round(game.t / 60) + ' min';
-  $('hLots').textContent = fmt(inLots); $('hRoad').textContent = fmt(onRoad); $('hGone').textContent = fmt(game.gone); $('hBlocked').textContent = blocked;
+  $('hLots').textContent = fmt(queued); $('hRoad').textContent = fmt(onRoad); $('hGone').textContent = fmt(game.gone); $('hBlocked').textContent = blocked;
+  if (ghost) {
+    const g = tally(ghost);
+    $('hLotsVs').textContent = `${ghostKind} ${fmt(g.waiting)}`;
+    $('hBlockedVs').textContent = `${ghostKind} ${g.blocked}`;
+  }
 }
 
 // ---------- planning (in a worker so the map keeps moving) ----------
@@ -494,7 +523,7 @@ renderer.setAnimationLoop((now) => {
   }
   if (running && !paused && game) {
     simAcc += dt * +$('speed').value;
-    let steps = 0; while (simAcc >= 3 && steps < 400) { simAcc -= 3; steps++; if (game.step()) { running = false; paused = true; $('pause').textContent = 'Play again'; break; } }
+    let steps = 0; while (simAcc >= 3 && steps < 400) { simAcc -= 3; steps++; if (stepBoth()) { running = false; paused = true; $('pause').textContent = 'Play again'; break; } }
     if (selected && (labelTick === 0)) showInfo(selected);
   }
   drawLayers();

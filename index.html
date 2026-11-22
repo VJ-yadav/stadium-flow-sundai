@@ -80,7 +80,8 @@
   .hud { position:fixed; top:12px; right:12px; display:grid; grid-template-columns:repeat(5,auto); gap:4px 18px; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px 16px; font:13px var(--mono); z-index:2 }
   .hud b { font:700 26px var(--display); display:block; color:var(--fg) } .hud span { color:var(--muted) } .hud .red b { color:var(--red) }
   .hud .title { grid-column:1/-1; font:600 15px var(--body); color:var(--amber) }
-  .attr { position:fixed; right:72px; bottom:2px; font-size:11px; color:var(--muted); max-width:46ch; text-align:right; z-index:1 }
+  .hud small { display:block; color:var(--muted); font-size:12.5px; min-height:1.2em }
+  .attr { position:fixed; right:72px; bottom:96px; text-align:right; font-size:11px; color:#c9cfd3; background:var(--panel); border-radius:4px; padding:2px 8px; max-width:46ch; z-index:1 }
 
   .story { position:fixed; left:50%; transform:translateX(-50%); bottom:96px; width:min(620px, calc(100vw - 32px)); background:rgba(12,16,19,.97); border:1px solid var(--amber); border-radius:12px; padding:16px 20px; display:grid; gap:8px; box-shadow:0 10px 36px rgba(0,0,0,.5); z-index:6; box-sizing:border-box; font-size:17px }
   .story[hidden], .info[hidden] { display:none } .story h3 { margin:0; font:700 26px var(--display) } .story p { margin:0 } .story .step { font:500 12.5px var(--mono); color:var(--amber); text-transform:uppercase; letter-spacing:.06em }
@@ -98,7 +99,7 @@
   @media (max-width: 900px) {
     .dock { flex-direction:row; left:12px; right:12px } .dock .logo { display:none } .dock button { width:auto; flex:1 }
     .drawer { left:12px; right:12px; width:auto; top:84px; bottom:auto; max-height:calc(100% - 200px) } body.has-player .drawer { bottom:auto }
-    .hud, .attr { display:none } .player { left:12px; max-width:calc(100vw - 24px) } .player .jumps span { display:none }
+    .hud { display:none } .attr { bottom:auto; top:64px; left:12px; max-width:calc(100vw - 24px) } .player { left:12px; max-width:calc(100vw - 24px) } .player .jumps span { display:none }
     .info { top:84px; max-height:50% } .mapctl select { display:none }
   }
 </style>
@@ -203,10 +204,10 @@
 <div class="hud" aria-live="polite">
   <div class="title" id="hTitle">Our lots</div>
   <div><span>After the game</span><b id="hClock">0 min</b></div>
-  <div><span>Still in lots</span><b id="hLots">0</b></div>
+  <div><span>Waiting at gates</span><b id="hLots" title="Cars with engines running, queued to get out of a lot">0</b><small id="hLotsVs"></small></div>
   <div><span>On Route 1</span><b id="hRoad">0</b></div>
   <div><span>Home</span><b id="hGone">0</b></div>
-  <div class="red"><span>Gates blocked</span><b id="hBlocked">0</b></div>
+  <div class="red"><span>Gates blocked</span><b id="hBlocked">0</b><small id="hBlockedVs"></small></div>
 </div>
 
 <aside class="story" id="story" hidden aria-live="polite">
