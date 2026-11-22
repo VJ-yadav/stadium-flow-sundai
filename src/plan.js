@@ -193,8 +193,12 @@ export function planEvent(net0, c, records = [], onProgress) {
   const ourAlloc = allocate(cr, order, rates, c.budget);
   const releaseTest = testRelease(net, cr, c, base, holders(cr, ourAlloc, (l) => rates[l], 7).held);
   // Same release time as today unless the operator picks one, so the lot choice is compared fairly.
-  const ours = mk('ours', ourAlloc, c.releaseMin || HOLD_MIN);
-  return { conditions: c, cars: cr.N, base: { avgInCarMin: +base.avgInCarMin.toFixed(1), avgHomeMin: +base.avgHomeMin.toFixed(1), lastOutMin: Math.round(base.lastOutMin) }, today, ours, releaseTest, why: why(net, records, bel, ours, values, records.length ? groupValues(withExits(net0, net0.lots.map(() => PRIOR_EXIT)), crowd(net0, c), c).values : values), values: groupList(net, cr, values) };
+  let ours = mk('ours', ourAlloc, c.releaseMin || HOLD_MIN);
+  // Safety check: never recommend a plan the model expects to do worse than today's.
+  if (ours.result.carMinSaved < today.result.carMinSaved) ours = { ...mk('ours', today.alloc, c.releaseMin || HOLD_MIN), fallback: true };
+  const whyLines = why(net, records, bel, ours, values, records.length ? groupValues(withExits(net0, net0.lots.map(() => PRIOR_EXIT)), crowd(net0, c), c).values : values);
+  if (ours.fallback) whyLines.unshift("For this game the model found no better split than today's lot, so it recommends today's lot. With an extra lane, the road copes better and spreading cards buys less.");
+  return { conditions: c, cars: cr.N, base: { avgInCarMin: +base.avgInCarMin.toFixed(1), avgHomeMin: +base.avgHomeMin.toFixed(1), lastOutMin: Math.round(base.lastOutMin) }, today, ours, releaseTest, why: whyLines, values: groupList(net, cr, values), beliefs: bel.map((b, i) => ({ lot: net.lots[i].name, exit: +b.exit.toFixed(1), exitFrom: b.exitFrom, take: +b.rate.toFixed(2), takeFrom: b.from })) };
 }
 
 // When should the card lots open? Too early and card holders drive into the jam; too late and
@@ -233,11 +237,18 @@ export function runEvent(net0, c, plan, id) {
 }
 
 // What a gate counter would show: each lot's cars a minute in its 5 busiest minutes.
+// Only cars that had to queue at the gate count (otherwise a quiet gate looks slow), and a lot
+// needs at least 100 queued cars to give a reading; smaller lots keep the assumed speed.
+const MIN_QUEUED = 100;
 function gateCounts(net, cr, game) {
-  const per = net.lots.map(() => new Map()), out = {};
-  for (let k = 0; k < cr.N; k++) if (game.state[k] >= 2) { const m = Math.floor(game.enter[k] / 60), p = per[cr.lot[k]]; p.set(m, (p.get(m) || 0) + 1); }
+  const per = net.lots.map(() => new Map()), queued = new Int32Array(net.lots.length), out = {}, dep = game.cars.dep;
+  for (let k = 0; k < cr.N; k++) {
+    if (game.state[k] < 2 || game.enter[k] - dep[k] < 60) continue;
+    const l = cr.lot[k], m = Math.floor(game.enter[k] / 60), p = per[l];
+    p.set(m, (p.get(m) || 0) + 1); queued[l]++;
+  }
   per.forEach((p, l) => {
-    if (!p.size) return;
+    if (queued[l] < MIN_QUEUED) return;
     const top = [...p.values()].sort((a, b) => b - a).slice(0, 5);
     out[net.lots[l].name] = +(top.reduce((a, b) => a + b, 0) / top.length).toFixed(1);
   });
