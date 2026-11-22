@@ -1,39 +1,29 @@
-// Headless check of the operator plan: event 1 with no memory, save its record, plan event 2.
-// node scripts/check_plan.mjs [--sample]   (--sample writes public/data/plan.sample.json)
+// Headless check of the operator plan: game 1 with no memory, save its record, plan game 2.
+// node scripts/check_plan.mjs [cars] [cf]
 import fs from 'node:fs';
 import { buildNet, planEvent, runEvent } from '../src/plan.js';
 
 const data = JSON.parse(fs.readFileSync(new URL('../public/data/foxborough.json', import.meta.url)));
 const net = buildNet(data);
-const c = { cars: 14000, trains: 3000, contraflow: false, budget: 50000 };
-
-const row = (p) => `${p.kind.padEnd(5)} avg ${String(p.result.avgInCarMin).padStart(5)} min | last out ${p.result.lastOutMin} min | saved ${p.result.carMinSaved.toLocaleString('en-US').padStart(7)} car-min | spent $${p.result.spent.toLocaleString('en-US')} | ${p.result.perThousand.toLocaleString('en-US')} per $1,000`;
-const lots = (p) => Object.entries(p.cards).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([n, k]) => `${n} ${k}`).join(', ');
+const c = { cars: +(process.argv[2] || 14000), trains: 3000, contraflow: process.argv[3] === 'cf', budget: 50000, releaseMin: 75 };
+const f = (x) => Math.round(x).toLocaleString('en-US');
+const row = (name, m) => console.log(`  ${name.padEnd(8)} lots ${String(m.lots).padStart(2)} cars ${f(m.held).padStart(5)} $${f(m.spent).padStart(6)} | jammed ${m.jamMin} min | worst ${f(m.peakStuck)} stuck at ${m.peakAt} min | blocked gate-min ${m.blockedGateMin} | idling ${f(m.idleH)} h (saved ${f(m.idleSavedH ?? 0)}) | in car ${m.avgInCarMin} | home ${m.avgHomeMin}`);
 
 let t0 = Date.now();
 const p1 = planEvent(net, c, []);
-console.log(`event 1 plan (${Date.now() - t0} ms, ${p1.cars} cars, no cards: avg ${p1.base.avgInCarMin} min, last out ${p1.base.lastOutMin} min)`);
-console.log(' ', row(p1.today)); console.log(' ', row(p1.ours)); console.log('  ours cards:', lots(p1.ours)); p1.why.forEach((w) => console.log('  why:', w));
-console.log(`  avg game end to home: no cards ${p1.base.avgHomeMin} min | today ${p1.today.result.avgHomeMin} | ours ${p1.ours.result.avgHomeMin}`);
-console.log(`  release test (ours picks ${p1.releaseTest.pick} min):`);
-p1.releaseTest.rows.forEach((r) => console.log(`    open card lots at ${String(r.min).padStart(3)} min: saves ${r.carMinSaved.toLocaleString('en-US').padStart(7)} car-min, card holders wait ${r.heldWaitMin} min extra, avg home ${r.avgHomeMin} min`));
+console.log(`game 1 plan, ${p1.cars} cars, ${Date.now() - t0} ms`);
+row('none', p1.base); row('today', p1.today.result); row('ours', p1.ours.result);
+console.log('  delayed lots:', p1.ours.lots.join(', '));
+console.log('  release test:', p1.releaseTest.rows.map((r) => `${r.min}: saves ${f(r.idleSavedH)} h, jam ${r.jamMin}, wait ${r.heldWaitMin}`).join(' | '), '-> pick', p1.releaseTest.pick);
+p1.why.forEach((w) => console.log('  why:', w));
 
-const real1 = runEvent(net, c, p1.ours, '2026-11-23-g1');
-const today1 = runEvent(net, c, p1.today, 'today-check');
-console.log('event 1 played (real take rates):');
-console.log('  today', JSON.stringify({ avg: today1.record.result.avgInCarMin, per1k: today1.record.result.perThousand, spent: today1.record.result.spent }));
-console.log('  ours ', JSON.stringify({ avg: real1.record.result.avgInCarMin, per1k: real1.record.result.perThousand, spent: real1.record.result.spent }));
-
+const g1 = runEvent(net, c, p1.ours, 'game-1');
+console.log('game 1 played (real gates):'); row('ours', g1.record.result);
 t0 = Date.now();
-const p2 = planEvent(net, c, [real1.record]);
-console.log(`event 2 plan with event 1's record (${Date.now() - t0} ms):`);
-console.log(' ', row(p2.today)); console.log(' ', row(p2.ours)); console.log('  ours cards:', lots(p2.ours)); p2.why.forEach((w) => console.log('  why:', w));
-const real2 = runEvent(net, c, p2.ours, '2026-11-23-g2');
-console.log('event 2 played:', JSON.stringify({ avg: real2.record.result.avgInCarMin, per1k: real2.record.result.perThousand, spent: real2.record.result.spent }));
-
-if (process.argv.includes('--sample')) {
-  const strip = (p) => ({ kind: p.kind, budget: p.budget, cards: p.cards, result: p.result });
-  const sample = { conditions: c, base: p2.base, today: strip(p2.today), ours: strip(p2.ours), why: p2.why, records: [real1.record] };
-  fs.writeFileSync(new URL('../public/data/plan.sample.json', import.meta.url), JSON.stringify(sample, null, 2) + '\n');
-  console.log('wrote public/data/plan.sample.json');
-}
+const p2 = planEvent(net, c, [g1.record]);
+console.log(`game 2 plan with game 1's record, ${Date.now() - t0} ms`);
+row('ours', p2.ours.result); console.log('  delayed lots:', p2.ours.lots.join(', '));
+p2.why.forEach((w) => console.log('  why:', w));
+row('played', runEvent(net, c, p2.ours, 'game-2').record.result);
+const own = planEvent(net, c, [g1.record], null, ['Lot 55', 'Lot 42']);
+console.log("operator's own pick (Lot 55 + Lot 42):"); row('own', own.ours.result);
