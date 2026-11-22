@@ -6,8 +6,7 @@ import { TilesRenderer } from '3d-tiles-renderer';
 import { GoogleCloudAuthPlugin } from '3d-tiles-renderer/core/plugins';
 import { GLTFExtensionsPlugin, ReorientationPlugin, TileCompressionPlugin } from '3d-tiles-renderer/three/plugins';
 import { Game, JAM, CELL_M } from './sim.js';
-import { buildNet, crowd, realNet, TODAY_LOTS, CARD_USD } from './plan.js';
-import { listEvents, saveEvent, clearEvents, exportEvents } from './memory.js';
+import { buildNet, crowd, gameOpts, TODAY_LOTS, CARD_USD } from './plan.js';
 
 const KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY;
 const $ = (id) => document.getElementById(id);
@@ -196,29 +195,36 @@ const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), P = new THREE.Vector3
 const HIDE = new THREE.Matrix4().makeScale(0, 0, 0);
 
 // ---------- replay state ----------
-let conditions = null, lastPlan = null, runs = null, view = 'ours';
+let conditions = null, lastPlan = null, runs = null, view = 'plan';
 let game = null, held = null, cr = null, running = false, paused = false, simAcc = 0;
-// The plan we compare against, played on the same clock but not drawn: Plan vs Today, others vs Plan.
+// The option we compare against, played on the same clock but not drawn: the plan vs nothing
+// extra, every other option vs the plan.
 let ghost = null, ghostKind = null;
-// Same options the planner used (lanes, contraflow, merge rule), so the replay matches its numbers.
-const gameOpts = (c) => ({ lanesNorth: 2, lanesSouth: 2, contraflow: !!c.contraflow, ...(c.zipper != null && { zipper: +c.zipper }) });
-const REAL = realNet(net);
+// Each option is replayed with its own gate speeds (staffed gates are faster) and lanes, so the
+// replay matches the planner's numbers.
+function gameFor(kind) {
+  const r = runs[kind].replay;
+  const n = { ...net, lots: net.lots.map((l, i) => ({ ...l, rate: r.rates[i] })) };
+  return new Game(n, { lot: cr.lot, dir: cr.dir, dep: r.dep }, gameOpts({ ...conditions, contraflow: r.contraflow }));
+}
 
 function startReplay(kind) {
-  if (!runs) return;
+  if (!runs?.[kind]) return;
   view = kind;
   const r = runs[kind];
   cr = crowd(net, conditions);
-  game = new Game(REAL, { lot: cr.lot, dir: cr.dir, dep: r.dep }, gameOpts(conditions));
+  game = gameFor(kind);
   // Start paused at the whistle so the screen can be explained before anything moves.
-  held = r.held; running = true; paused = true; simAcc = 0;
-  ghostKind = kind === 'ours' ? 'today' : 'ours';
-  ghost = new Game(REAL, { lot: cr.lot, dir: cr.dir, dep: runs[ghostKind].dep }, gameOpts(conditions));
+  held = r.replay.held; running = true; paused = true; simAcc = 0;
+  ghostKind = kind === 'plan' ? 'none' : 'plan';
+  ghost = gameFor(ghostKind);
   $('pause').textContent = 'Play';
   document.querySelectorAll('.seg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.kind === kind)));
-  $('hTitle').textContent = PLAN_NAME[kind] + (kind === 'none' ? '' : ` · ${r.record.plan.lots.length} delayed lot${r.record.plan.lots.length === 1 ? '' : 's'}, open at ${r.record.plan.releaseMin} min`);
-  delayedNow = new Set(r.record.plan.lots || []);
-  const openBtn = document.querySelector('.jumps [data-open]'); openBtn.dataset.min = String((r.record.plan.releaseMin || 75) + 1);
+  document.querySelectorAll('#optRows tr[data-kind]').forEach((tr) => tr.classList.toggle('watching', tr.dataset.kind === kind));
+  $('hTitle').textContent = 'Watching: ' + r.name + (r.lots.length ? ` · delayed lots open at ${r.releaseMin} min` : '');
+  delayedNow = new Set(r.lots); staffedNow = new Set(r.staffed);
+  const openBtn = document.querySelector('.jumps [data-open]');
+  openBtn.hidden = !r.lots.length; openBtn.dataset.min = String(r.releaseMin + 1);
   if (selected) showInfo(selected);
 }
 
@@ -254,8 +260,7 @@ function seekTo(min) {
 // Tower labels: lot name and cars still inside, on top of each tower.
 const short = (n) => n.replace('Parking ', '').replace('Unnamed lot', 'Lot #');
 const towerLabels = lots.map((l) => { const o = label('', l.c[0], 0, l.c[1], 'tower'); o.visible = false; return o; });
-let delayedNow = new Set(), lastCounts = null, labelTick = 0, selected = null;
-const PLAN_NAME = { none: 'No delayed lots', today: 'Today: Lot 55', ours: 'Plan' };
+let delayedNow = new Set(), staffedNow = new Set(), lastCounts = null, labelTick = 0, selected = null;
 
 function drawLayers() {
   if (!game) { colMesh.count = 0; roadMesh.count = 0; ringMesh.count = 0; return; }
@@ -281,12 +286,12 @@ function drawLayers() {
       colMesh.setMatrixAt(l * 3 + s, M); colMesh.setColorAt(l * 3 + s, SEG[s]); y += h;
     }
     if (updLabels) {
-      const total = counts[l][0] + counts[l][1] + counts[l][2], o = towerLabels[l], delayed = delayedNow.has(lot.name);
-      o.visible = total >= 300 || delayed || selected?.lot === l;
+      const total = counts[l][0] + counts[l][1] + counts[l][2], o = towerLabels[l], delayed = delayedNow.has(lot.name), staffed = staffedNow.has(lot.name);
+      o.visible = total >= 300 || delayed || staffed || selected?.lot === l;
       if (o.visible) {
         o.position.y = y + 14;
-        o.element.textContent = `${short(lot.name)} · ${fmt(total)} cars${delayed ? ' · DELAYED' : ''}`;
-        o.element.className = 'lbl tower' + (delayed ? ' card' : '') + (selected?.lot === l ? ' sel' : '');
+        o.element.textContent = `${short(lot.name)} · ${fmt(total)} cars${delayed ? ' · DELAYED' : ''}${staffed ? ' · EXTRA STAFF' : ''}`;
+        o.element.className = 'lbl tower' + (delayed ? ' card' : '') + (staffed ? ' staff' : '') + (selected?.lot === l ? ' sel' : '');
       }
     }
     // blocked gate: cars queued at the gate and the Route 1 stretch it joins is full
@@ -319,7 +324,7 @@ function drawLayers() {
   $('hLots').textContent = fmt(queued); $('hRoad').textContent = fmt(onRoad); $('hGone').textContent = fmt(game.gone); $('hBlocked').textContent = blocked;
   if (ghost) {
     const g = tally(ghost);
-    const vs = { none: 'no delay', today: 'Lot 55', ours: 'plan' }[ghostKind];
+    const vs = ghostKind === 'plan' ? 'plan' : 'nothing extra';
     $('hLotsVs').textContent = `vs ${vs}: ${fmt(g.waiting)}`;
     $('hBlockedVs').textContent = `vs ${vs}: ${g.blocked}`;
   }
@@ -332,65 +337,83 @@ worker.onmessage = (e) => {
   const m = e.data;
   if (m.type === 'progress') { $('progress').style.width = Math.round(m.i / m.n * 100) + '%'; return; }
   if (m.type !== 'plan') return;
-  lastPlan = m.plan; runs = m.runs;
+  lastPlan = m.plan; runs = Object.fromEntries(lastPlan.options.map((o) => [o.key, o]));
   $('progress').style.width = '100%';
-  $('plan').disabled = false; $('plan').textContent = 'Recommend delayed lots';
-  $('status').textContent = `Planned for ${fmt(lastPlan.cars)} cars, using ${listEvents().length} past game(s). ${lastPlan.ours.own ? 'Showing your own lots.' : `Recommended: ${lastPlan.ours.lots.length} delayed lots.`} The replay is paused at the whistle.`;
-  showResult(); startReplay('ours');
+  $('plan').disabled = false; $('plan').textContent = 'Test these options';
+  $('status').textContent = `Tested for ${fmt(lastPlan.cars)} cars. The replay is paused at the whistle.`;
+  showResult(); startReplay('plan');
 };
 
 function conditionsFromForm() {
-  return { cars: +$('cars').value, trains: +$('train').value, contraflow: $('contra').checked, budget: +$('budget').value, releaseMin: +$('release').value, zipper: +$('merge').value };
+  return { cars: +$('cars').value, trains: +$('train').value, zipper: +$('merge').value,
+    contraflow: $('contra').checked, staff: +$('staff').value, delayed: $('delayedOn').checked, budget: +$('budget').value, releaseMin: +$('release').value };
 }
 // picked: the operator's own list of delayed lots, or null for the recommendation.
 function plan(picked = null) {
   if (!Array.isArray(picked)) picked = null;
   if (!picked || !conditions) conditions = conditionsFromForm();
-  $('plan').disabled = true; $('plan').textContent = 'Planning…'; $('progress').style.width = '0';
+  $('plan').disabled = true; $('plan').textContent = 'Testing…'; $('progress').style.width = '0';
   $('testLots').disabled = true; $('testLots').textContent = 'Testing…';
-  $('status').textContent = picked ? `Testing your ${picked.length} delayed lots…` : 'Testing every lot as a delayed lot. This takes a few seconds.';
-  const id = `${new Date().toISOString().slice(0, 10)}-g${listEvents().length + 1}`;
-  worker.postMessage({ type: 'plan', c: conditions, records: listEvents(), id, picked });
+  $('status').textContent = picked ? `Testing your ${picked.length} delayed lots…` : `Playing the night with each option${conditions.delayed ? ' and choosing delayed lots' : ''}. This takes about 20 seconds.`;
+  worker.postMessage({ type: 'plan', c: conditions, picked });
 }
 
+// ---------- results: every option on the same night, the lot schedule, the delayed lots ----------
 function showResult() {
-  const R = { none: runs.none.record.result, today: runs.today.record.result, ours: runs.ours.record.result };
-  const row = (name, f, cls = '') => `<tr class="${cls}"><td>${name}</td><td>${f(R.none, 'none')}</td><td>${f(R.today, 'today')}</td><td class="ours">${f(R.ours, 'ours')}</td></tr>`;
-  const cut = (now, before) => (before > 0 && now < before ? ` <small class="good">−${Math.round((1 - now / before) * 100)}%</small>` : '');
-  $('rows').innerHTML = [
-    row('Gate-minutes blocked', (r, k) => fmt(r.blockedGateMin) + (k === 'none' ? '' : cut(r.blockedGateMin, R.none.blockedGateMin)), 'key'),
-    row('Engine idling, all cars', (r, k) => fmt(r.idleH) + ' h' + (k === 'none' ? '' : cut(r.idleH, R.none.idleH)), 'key'),
-    row('Route 1 jammed', (r, k) => `${r.jamMin} min${k === 'none' ? '' : cut(r.jamMin, R.none.jamMin)}`),
-    row('Cars stuck at the worst moment', (r, k) => fmt(r.peakStuck) + (k === 'none' ? '' : cut(r.peakStuck, R.none.peakStuck))),
-    row('Delayed lots', (r) => r.lots, 'sub'),
-    row('Cars held (one $50 card each)', (r) => fmt(r.held), 'sub'),
-    row('Card cost', (r) => '$' + fmt(r.spent), 'sub'),
-    row('Avg whistle to highway', (r) => Math.round(r.avgHomeMin) + ' min', 'sub'),
-  ].join('');
-  const o = R.ours, overBudget = o.spent > conditions.budget;
-  // Lead with what holds whatever the merge rule: blocked gates and idling, against today's lot.
-  const pct = (now, before) => Math.round((1 - now / Math.max(1, before)) * 100);
-  const who = `${lastPlan.ours.own ? 'Your' : 'The recommended'} ${o.lots} delayed lot${o.lots === 1 ? '' : 's'}`;
-  const jamLine = o.jamMin < R.none.jamMin ? `Route 1 is jammed ${o.jamMin} min instead of ${R.none.jamMin}` : `Route 1 stays jammed about as long (${o.jamMin} min vs ${R.none.jamMin}): with this merge rule the road itself is the queue`;
-  $('headline').innerHTML = pct(o.blockedGateMin, R.none.blockedGateMin) > 0
-    ? `<b>${who}</b> cut blocked gate-minutes by <b>${pct(o.blockedGateMin, R.none.blockedGateMin)}%</b> and engine idling by <b>${fmt(R.none.idleH - o.idleH)} hours</b>, for $${fmt(o.spent)} of cards. Today's Lot 55, for $${fmt(R.today.spent)}: ${pct(R.today.blockedGateMin, R.none.blockedGateMin)}% and ${fmt(R.none.idleH - R.today.idleH)} hours. ${jamLine}.`
-    : `<b>${who} do not unblock gates</b> (${fmt(o.blockedGateMin)} gate-minutes vs ${fmt(R.none.blockedGateMin)} with no delayed lots). Try other lots, or the recommendation.`;
-  $('fine').textContent = `Time to the highway stays about the same (${Math.round(o.avgHomeMin)} vs ${Math.round(R.none.avgHomeMin)} min): Route 1 carries the same cars an hour either way. Delayed lots move the wait out of running cars and out of the jam, into the stadium and Patriot Place. Fans in a delayed lot wait about ${o.heldWaitMin} min longer, for $50 and free parking.${overBudget ? ` This set costs $${fmt(o.spent)}, over the $${fmt(conditions.budget)} budget.` : ''}`;
-  const rt = lastPlan.releaseTest, at = (min) => rt.rows.find((r) => r.min === min);
-  const chosen = conditions.releaseMin, adv = at(rt.pick), cur = at(chosen);
-  $('advice').textContent = !rt.rows.length || !cur ? '' : rt.pick === chosen
-    ? `Opening the delayed lots at ${chosen} min fits this game: opening later saves little more.`
-    : rt.pick < chosen
-      ? `For this game the road clears sooner: opening at ${rt.pick} min keeps most of the benefit and those fans get home ${chosen - rt.pick} min earlier.`
-      : `For this game Route 1 is still busy at ${chosen} min, so the delayed lots drive into it. Opening at ${rt.pick} min saves ${fmt(adv.idleSavedH - cur.idleSavedH)} more idling hours, and those fans wait ${adv.heldWaitMin - cur.heldWaitMin} min longer.`;
-  $('why').innerHTML = lastPlan.why.map((w) => `<li>${w}</li>`).join('');
-  picked = new Set(lastPlan.ours.lots);
-  renderLotList();
-  $('save').disabled = false; $('save').textContent = 'Save this game';
+  const none = runs.none.m, p = runs.plan.m;
+  const better = (now, before, unit = '') => (now < before ? ` <small class="good">−${fmt(before - now)}${unit}</small>` : '');
+  $('headline').innerHTML = lastPlan.options.length > 3 || conditions.contraflow || conditions.staff || conditions.delayed
+    ? `<b>${runs.plan.name.replace('Plan: ', 'With ')}</b>: Route 1 is jammed <b>${p.jamMin} min</b> instead of ${none.jamMin}, fans reach the highway in <b>${Math.round(p.avgHomeMin)} min</b> on average instead of ${Math.round(none.avgHomeMin)}, <b>${fmt(p.over60)}</b> drivers sit over an hour in their car instead of ${fmt(none.over60)}, and the last car is out at <b>${p.lastOutMin} min</b> instead of ${none.lastOutMin}.${p.spent ? ` Cards: $${fmt(p.spent)}.` : ''}`
+    : 'No option chosen yet: pick one or more in the Plan panel.';
+  $('optRows').innerHTML = lastPlan.options.map((o) => {
+    const m = o.m, base = o.key === 'none';
+    const takes = [o.contraflow && 'police detail for the lane', o.staffed.length && `crew at ${o.staffed.length} gates`, m.spent && `$${fmt(m.spent)} of cards`].filter(Boolean).join(', ') || 'nothing';
+    return `<tr data-kind="${o.key}" class="${o.key === 'plan' ? 'key' : ''}"><td>${o.name.replace('Plan: ', '<b>Plan</b>: ')}<small class="takes">Takes: ${takes}</small></td>
+      <td>${m.jamMin} min${base ? '' : better(m.jamMin, none.jamMin)}</td>
+      <td>${Math.round(m.avgHomeMin)} min${base ? '' : better(Math.round(m.avgHomeMin), Math.round(none.avgHomeMin))}</td>
+      <td>${fmt(m.over60)}${base ? '' : better(m.over60, none.over60)}</td>
+      <td>${m.lastOutMin} min${base ? '' : better(m.lastOutMin, none.lastOutMin)}</td>
+      <td><button type="button" class="watchBtn" data-kind="${o.key}" aria-label="Watch ${o.name}">Watch</button></td></tr>`;
+  }).join('');
+  const d = runs.delayed?.m || (runs.plan.lots.length ? p : null);
+  $('fine').innerHTML = `Every option is played on the same night: same cars, same lots, same road. Gate speeds are estimates (6 to 24 cars a minute per lot) until the venue counts them.${d ? ` Delayed-lot fans wait in the stadium, then sit about <b>${d.heldInCarMin} min</b> in their car (today's Lot 55 fans: ${runs.today.m.heldInCarMin} min, because its gate is slow).` : ''}`;
+  renderSchedule();
+  const delayedOn = !!conditions.delayed;
+  $('delayedBox').hidden = !delayedOn;
+  if (delayedOn) {
+    const rt = lastPlan.releaseTest, chosen = conditions.releaseMin, at = (min) => rt?.rows.find((r) => r.min === min);
+    $('advice').textContent = !rt || !at(chosen) ? '' : rt.pick === chosen
+      ? `Opening the delayed lots at ${chosen} min fits this plan: later doesn't cut the over-an-hour count further.`
+      : rt.pick < chosen
+        ? `Opening at ${rt.pick} min works as well (${fmt(at(rt.pick).over60)} over an hour vs ${fmt(at(chosen).over60)}) and those fans get home ${chosen - rt.pick} min sooner.`
+        : `Opening at ${rt.pick} min instead of ${chosen} cuts drivers over an hour from ${fmt(at(chosen).over60)} to ${fmt(at(rt.pick).over60)}: at ${chosen} min the road is still busy.`;
+    picked = new Set(runs.plan.lots);
+    renderLotList();
+  }
   document.querySelector('[data-panel=results]').disabled = false;
   $('player').hidden = false; document.body.classList.add('has-player');
   openPanel('results');
 }
+
+// How each lot opens and empties under the plan, against nothing extra (slowest lots first).
+function renderSchedule() {
+  const none = Object.fromEntries(runs.none.schedule.map((s) => [s.lot, s]));
+  const rows = runs.plan.schedule.filter((s) => s.cars >= 50 && s.emptyMin != null).sort((a, b) => none[b.lot].emptyMin - none[a.lot].emptyMin);
+  const max = Math.max(...rows.map((s) => Math.max(s.emptyMin, none[s.lot].emptyMin)), 120);
+  const pc = (min) => (min / max * 100).toFixed(1) + '%';
+  $('schedule').innerHTML = rows.map((s) => {
+    const was = none[s.lot].emptyMin, kind = s.delayed ? 'delayed' : s.staffed ? 'staffed' : 'normal';
+    const what = s.delayed ? `delayed, opens at ${runs.plan.releaseMin} min` : s.staffed ? `extra staff: gate ${s.gate} cars/min` : `gate ${s.gate} cars/min`;
+    return `<li><div class="sname"><b>${s.lot}</b> <small>${fmt(s.cars)} cars · ${what}</small></div>
+      <div class="sbar" title="Cars leave from ${s.firstOutMin} to ${s.emptyMin} min; with nothing extra, empty at ${was} min"><i class="${kind}" style="left:${pc(s.firstOutMin)};width:${pc(Math.max(1, s.emptyMin - s.firstOutMin))}"></i><u style="left:${pc(was)}"></u></div>
+      <div class="swhen">empty at <b>${s.emptyMin}</b>${was !== s.emptyMin ? ` <small>(was ${was})</small>` : ''}</div></li>`;
+  }).join('');
+  $('schedScale').innerHTML = [0, 30, 60, 90, 120, 150, 180, 210, 240].filter((m) => m <= max).map((m) => `<span style="left:${pc(m)}">${m}</span>`).join('');
+}
+$('optRows').addEventListener('click', (e) => {
+  const k = e.target.closest?.('.watchBtn')?.dataset.kind; if (!k) return;
+  const min = game ? Math.floor(game.t / 60) : 0; startReplay(k); seekTo(min); closePanels();
+});
 
 // ---------- the operator switches whole lots on and off ----------
 let picked = new Set();
@@ -399,13 +422,13 @@ function renderLotList() {
   if (!lastPlan) return;
   const rec = new Set(lastPlan.recommended), list = lastPlan.values.filter((v) => v.value > 0 || picked.has(v.lot));
   let cars = 0; for (const v of lastPlan.values) if (picked.has(v.lot)) cars += v.cars;
-  $('lotList').innerHTML = list.map((v) => `<li><label><input type="checkbox" data-lot="${v.lot}" ${picked.has(v.lot) ? 'checked' : ''}><span><b>${v.lot}</b>${rec.has(v.lot) ? ' <small class="rec">recommended</small>' : ''}${TODAY_LOTS.includes(v.lot) ? ' <small class="rec today">today</small>' : ''}<br><small>${fmt(v.cars)} cars · $${fmt(v.cost)} · saves ${Math.round(v.value)} idling min per car held</small></span></label></li>`).join('');
-  const changed = !sameSet(picked, new Set(lastPlan.ours.lots));
+  $('lotList').innerHTML = list.map((v) => `<li><label><input type="checkbox" data-lot="${v.lot}" ${picked.has(v.lot) ? 'checked' : ''}><span><b>${v.lot}</b>${rec.has(v.lot) ? ' <small class="rec">recommended</small>' : ''}${TODAY_LOTS.includes(v.lot) ? ' <small class="rec today">today</small>' : ''}<br><small>${fmt(v.cars)} cars · $${fmt(v.cost)} · gate ${v.gate} cars/min</small></span></label></li>`).join('');
+  const changed = !sameSet(picked, new Set(runs.plan.lots));
   $('lotSum').textContent = `${picked.size} lots, ${fmt(cars)} cars, $${fmt(cars * CARD_USD)} of $${fmt(conditions.budget)}`;
   $('lotSum').classList.toggle('over', cars * CARD_USD > conditions.budget);
   $('testLots').disabled = !changed;
   $('testLots').textContent = changed ? 'Test these lots' : 'Tested';
-  $('recLots').hidden = !lastPlan.ours.own && !changed;
+  $('recLots').hidden = !runs.plan.own && !changed;
 }
 $('lotList').addEventListener('change', (e) => {
   const n = e.target.dataset?.lot; if (!n) return;
@@ -415,12 +438,6 @@ $('lotList').addEventListener('change', (e) => {
 $('testLots').addEventListener('click', () => plan([...picked]));
 $('recLots').addEventListener('click', () => plan(null));
 function toggleLot(name) { if (picked.has(name)) picked.delete(name); else picked.add(name); renderLotList(); plan([...picked]); }
-
-function renderHistory() {
-  const ev = listEvents();
-  $('memCount').textContent = ev.length || '';
-  $('history').innerHTML = ev.length ? ev.map((r) => `<li><strong>${r.id}</strong>: ${fmt(r.conditions.cars)} cars${r.conditions.contraflow ? ', contraflow' : ''}, ${(r.plan.lots || []).length} delayed lots ($${fmt(r.result.spent || 0)})<br><span>${r.result.jamMin !== undefined ? `Route 1 jammed ${r.result.jamMin} min, ${fmt(r.result.idleSavedH || 0)} idling hours saved. ` : ''}Gate speeds counted at ${Object.keys(r.result.exitPerMin || {}).length} lots.</span></li>`).join('') : '<li><span>None yet. Plan a game, then save it.</span></li>';
-}
 
 // ---------- click a tower or a road bar to see what is happening there ----------
 const picker = new THREE.Raycaster(), pointer = new THREE.Vector2();
@@ -457,22 +474,23 @@ $('info').addEventListener('click', (e) => { const n = e.target.closest?.('#togg
 
 function showInfo(sel) {
   if (!game || !lastCounts) return;
-  const min = Math.round(game.t / 60), planName = PLAN_NAME[view];
+  const min = Math.round(game.t / 60), r = runs[view], planName = r.name;
   let html;
   if (sel.lot !== undefined) {
-    const l = sel.lot, lot = lots[l], [leaving, staying, notYet] = lastCounts[l], delayed = delayedNow.has(lot.name);
+    const l = sel.lot, lot = lots[l], [leaving, staying, notYet] = lastCounts[l], delayed = delayedNow.has(lot.name), staffed = staffedNow.has(lot.name);
     const kmFrom = (cells[lot.cell].s / 1000).toFixed(1);
-    const b = lastPlan?.beliefs?.[l], v = lastPlan?.values?.find((x) => x.lot === lot.name);
-    const gate = b?.exitFrom ? `measured at about <b>${Math.round(b.exit)} cars a minute</b> (saved game ${b.exitFrom})` : `assumed <b>15 cars a minute</b> (no gate count saved yet)`;
-    const open = runs?.[view]?.record.plan.releaseMin;
+    const v = lastPlan?.values?.find((x) => x.lot === lot.name), s = r.schedule[l], was = runs.none.schedule[l];
+    const what = delayed ? `<span class="tag ok">DELAYED LOT</span> Stays closed until ${r.releaseMin} min after the game; every car gets a $50 card${v ? ` (${fmt(v.cars)} cars, $${fmt(v.cost)})` : ''}.`
+      : staffed ? `<span class="tag ok">EXTRA STAFF</span> Extra attendants (or a second exit lane) bring its gate to ${s.gate} cars a minute.`
+      : '<span class="tag none">NORMAL LOT</span> Cars leave when they are ready.';
     html = `<h3>${lot.name}</h3>
       <p class="k">${lot.side === 'east' ? 'East' : 'West'} of Route 1 · about ${fmt(lot.capEst)} spaces (estimate) · joins Route 1 ${kmFrom} km from the south end</p>
-      <p>${delayed ? `<span class="tag ok">DELAYED LOT</span> In "${planName}" this lot stays closed until ${open} min after the game. Every car gets a $50 card${v ? `: ${fmt(v.cars)} cars, $${fmt(v.cost)}` : ''}.` : `<span class="tag none">NORMAL LOT</span> In "${planName}" cars leave when they are ready.`}</p>
+      <p><b>In "${planName}":</b> ${what}</p>
+      ${s?.emptyMin != null ? `<p>Empty at <b>${s.emptyMin} min</b> after the game${was && was.emptyMin !== s.emptyMin ? ` (with nothing extra: ${was.emptyMin} min)` : ''}.</p>` : ''}
       <p><b>Minute ${min}:</b> ${fmt(leaving)} drivers in their cars trying to get out, ${fmt(staying)} waiting on purpose (delayed lot), ${fmt(notYet)} not at their car yet.</p>
       <p>Gate: ${lastCounts.blocked[l] ? '<span class="tag">BLOCKED</span> Route 1 outside is full, so nobody can get out right now.' : leaving ? '<span class="tag ok">MOVING</span> cars are getting out.' : '<span class="tag ok">CLEAR</span> no queue.'}</p>
-      <p>Gate speed: ${gate}.</p>
-      ${v ? `<p class="k">As a delayed lot, it saves about <b>${Math.round(v.value)} idling minutes per car held</b>, counting everyone it no longer blocks. The plan picks lots where this is highest.</p>` : ''}
-      ${v && v.cars >= 50 ? `<button class="primary" type="button" id="toggleLot" data-lot="${lot.name}">${picked.has(lot.name) ? 'Make it a normal lot and test' : 'Make it a delayed lot and test'}</button>` : ''}`;
+      <p class="k">Gate speed: about ${s?.gate ?? v?.gate} cars a minute (estimate until counted).</p>
+      ${conditions.delayed && v && v.cars >= 50 ? `<button class="primary" type="button" id="toggleLot" data-lot="${lot.name}">${picked.has(lot.name) ? 'Make it a normal lot and test' : 'Make it a delayed lot and test'}</button>` : ''}`;
   } else {
     const n = game.cell[sel.dir][sel.cell].length, cap = JAM * game.lanes[sel.dir], f = n / cap;
     const feeders = lots.filter((x) => (sel.dir === 0 ? x.cell <= sel.cell : x.cell >= sel.cell)).length;
@@ -487,13 +505,13 @@ function showInfo(sel) {
 
 // ---------- the guided tour: one moment at a time, paused ----------
 const TOUR = [
-  { min: 0, title: 'The final whistle', text: 'Each tower is one parking lot. Its height is the cars still in it. White means fans are still in the stadium or walking to their car. Blue towers are delayed lots: they stay closed until their opening time and every car in them gets a $50 Visa card. About 13,000 cars need to leave through one road: Route 1.' },
-  { min: 20, title: '20 minutes: everyone heads for the car', text: 'Amber is drivers sitting in their car with the engine running, waiting to get out of the lot. Most fans leave in the first 15 minutes, so the towers turn amber together.' },
-  { min: 30, title: 'Route 1 fills up', text: 'The bars along Route 1 are the queue: one bar per 40 m of road. Tall and red means packed. The northbound side (to I-95) fills first because 60% of cars go north.' },
-  { min: 35, title: 'The broken part: blocked gates', text: 'A red ring means that lot cannot let anyone out, because the road outside its exit is full. The red line points to the stretch blocking it. This is why people sit in the lot for an hour: not the lot itself, the road backing up into it.' },
-  { min: 45, title: 'Delayed lots wait on purpose', text: 'The blue towers are delayed lots. Those fans parked free and get a $50 card; they wait in the stadium or at Patriot Place, not in a running car. Their cars are not on Route 1 during the worst of it, so the lots behind them are blocked less. The plan picks the lots whose cars block the most.' },
-  { min: 76, title: 'Delayed lots open', text: 'At the opening time the blue towers turn amber and drive out. By now the worst of the jam has passed, so they get out in minutes. Click any tower to see its numbers, or to switch it between delayed and normal.' },
-  { min: 45, title: 'Compare the plans', text: 'Switch between No delayed lots, Today: Lot 55, and Plan at the bottom, at the same minute. Count the red rings and look at the height of the Route 1 bars. The Results panel has the numbers.', compare: true },
+  { min: 0, title: 'The final whistle', text: 'Each tower is one parking lot; its height is the cars still in it. White means fans are still in the stadium or walking to their car. About 13,000 cars have to leave through one road, Route 1.' },
+  { min: 20, title: 'Everyone heads for the car', text: 'Amber is drivers sitting in their car with the engine running, waiting to get out. Most fans leave in the first 15 minutes, so the towers turn amber together.' },
+  { min: 30, title: 'Route 1 fills up', text: 'The bars along Route 1 are the queue, one per 40 m of road. Tall and red means packed. Northbound, to I-95, fills first: 60% of cars go north.' },
+  { min: 35, title: 'Blocked gates', text: 'A red ring means that lot cannot let anyone out: the road outside its exit is full. The red line points to the stretch blocking it. Some lots are also slow on their own, because their gate lets out only a few cars a minute.' },
+  { min: 45, title: 'What the plan changes', text: 'The contraflow lane gives northbound one more lane, so its bars stay lower. Lots with extra staff (green tags) let cars out faster. Delayed lots (blue) wait in the stadium for $50 and free parking, so they are not on Route 1 during the worst of it.' },
+  { min: 45, title: 'Compare at the same minute', text: 'Switch to "Nothing extra" at the bottom: same minute, no options. Count the red rings and the amber towers, then switch back to "Plan". The top right shows both counts side by side.', compare: true },
+  { min: 120, title: 'Two hours after the whistle', text: 'With nothing extra, the slowest lots still hold hundreds of cars after two hours. With the plan most lots are empty. The Results panel has the numbers for each option and the lot schedule.' },
 ];
 let tourAt = -1;
 function tourGo(i) {
@@ -542,15 +560,7 @@ document.querySelectorAll('.drawer [data-close]').forEach((b) => b.addEventListe
 addEventListener('keydown', (e) => { if (e.key === 'Escape') { closePanels(); $('story').hidden = true; } });
 openPanel('plan');
 $('restart').addEventListener('click', () => startReplay(view));
-$('save').addEventListener('click', () => {
-  const r = saveEvent(runs.ours.record);
-  $('save').disabled = true; $('save').textContent = r.ok ? `Saved as ${r.id}` : 'Could not save (browser storage blocked)';
-  renderHistory();
-  $('status').textContent = 'Saved. Plan again: the planner now uses the gate speeds it just measured.';
-});
-$('clear').addEventListener('click', () => { if (confirm('Forget all saved games in this browser?')) { clearEvents(); renderHistory(); } });
-$('export').addEventListener('click', exportEvents);
-renderHistory();
+$('delayedOn').addEventListener('change', () => { $('delayedFields').hidden = !$('delayedOn').checked; });
 
 function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h); labels.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); tiles?.setResolutionFromRenderer(camera, renderer); }
 addEventListener('resize', resize); resize();

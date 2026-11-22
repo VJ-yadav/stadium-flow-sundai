@@ -104,6 +104,27 @@
   .lotlist input { margin-top:4px; width:18px; height:18px; accent-color:var(--blue) } .lotlist small { color:var(--muted) }
   .lotlist small.rec { font:600 11px var(--mono); color:var(--teal); text-transform:uppercase } .lotlist small.rec.today { color:var(--amber) }
   .info .tag.none { background:rgba(255,255,255,.1); color:var(--muted) } .info button { margin-top:8px }
+  .drawer { grid-auto-rows:max-content }   /* scrollable children keep their height in a full panel */
+  .lbl.tower.staff { background:#0f4d3a; border-color:#5fe0b8 }
+  .opt { background:rgba(255,255,255,.03); border:1px solid var(--line); border-radius:8px; padding:10px 12px }
+  .sub { display:grid; gap:10px; padding-left:28px } .sub[hidden] { display:none }
+  .adv summary { cursor:pointer; color:var(--muted); font-size:14px } .adv[open] summary { margin-bottom:8px }
+  .tablewrap { overflow-x:auto }
+  table.opts { font-size:14px } table.opts th { font-size:11px; text-align:right } table.opts th:first-child { text-align:left }
+  table.opts td { white-space:nowrap } table.opts td:first-child { white-space:normal; color:var(--fg); min-width:150px }
+  table.opts small.takes { display:block; font-size:12px; color:var(--muted); margin-top:2px }
+  table.opts small.good { display:block }
+  table.opts tr.key td { font-size:15px; color:var(--fg); background:rgba(242,165,22,.08) }
+  table.opts tr.watching td:first-child { box-shadow:inset 3px 0 0 var(--amber); padding-left:8px }
+  .watchBtn { padding:6px 10px; font-size:13px }
+  .sched { list-style:none; margin:0; padding:0; display:grid; gap:6px; max-height:340px; overflow:auto }
+  .sched li { display:grid; grid-template-columns:minmax(130px,1.2fr) 2fr auto; gap:10px; align-items:center; font-size:13.5px }
+  .sched .sname small { display:block; color:var(--muted); font-size:12px }
+  .sbar { position:relative; height:14px; background:#1b2125; border-radius:3px }
+  .sbar i { position:absolute; top:0; bottom:0; border-radius:3px; background:var(--amber) } .sbar i.delayed { background:#3d8bff } .sbar i.staffed { background:#34c6a8 }
+  .sbar u { position:absolute; top:-3px; bottom:-3px; width:3px; background:#9aa3a9; border-radius:1px }
+  .swhen { font-size:13px; white-space:nowrap } .swhen small { color:var(--muted) }
+  .sscale { position:relative; height:16px; margin-left:calc(140px + 10px); margin-right:90px; font:11px var(--mono); color:var(--muted) } .sscale span { position:absolute; transform:translateX(-50%) }
 
   @media (max-width: 1100px) { .player .speed, .mapctl .hint { display:none } .info { max-height:calc(100% - 124px - 300px) } }
   /* ---- phone: icons in a top bar, panels as sheets between the bar and the player ---- */
@@ -145,55 +166,56 @@
     <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>Plan</button>
   <button type="button" data-panel="results" aria-controls="p-results" aria-expanded="false" title="Results: today's lot vs ours" disabled>
     <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M8 17v-5M13 17V8M18 17v-9"/></svg>Results</button>
-  <button type="button" data-panel="memory" aria-controls="p-memory" aria-expanded="false" title="Past games the planner learned from">
-    <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 3"/></svg>Past games<span class="badge" id="memCount"></span></button>
   <button type="button" data-panel="key" aria-controls="p-key" aria-expanded="false" title="How to read the map">
     <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/></svg>Map key</button>
 </nav>
 
 <aside class="drawer" id="p-plan" aria-labelledby="h-event" hidden>
-  <header><h2 id="h-event">Plan tonight's game</h2><button class="min" type="button" data-close title="Fold away (Esc)" aria-label="Fold away"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18 9 12l6-6"/></svg></button></header>
-  <p class="q">After the game, about 13,000 cars try to leave at once through one road, Route 1. <b>Delayed lots</b> spread them out: parking there is free, the lot opens later, and every car gets a <b>$50 Visa card</b>. <b>How many delayed lots tonight, and which ones?</b></p>
+  <header><h2 id="h-event">Plan the exit</h2><button class="min" type="button" data-close title="Fold away (Esc)" aria-label="Fold away"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18 9 12l6-6"/></svg></button></header>
+  <p class="q">After the game about 13,000 cars leave through one road, Route 1. <b>Pick the options you can use tonight</b> and see, before the game, how each one changes the exit and what it takes.</p>
   <p class="muted" id="mode">Loading the map…</p>
+  <h3>Tonight's game</h3>
   <div class="field"><label for="cars">Cars parked <output id="carsOut"></output></label><input id="cars" type="range" min="6000" max="17500" step="500" value="14000"><small>Our estimate from lot area: about 17,900 spaces.</small></div>
   <div class="field"><label for="train">Fans on trains <output id="trainOut"></output></label><input id="train" type="range" min="0" max="10000" step="500" value="3000"><small>About 1,200 fewer cars per 5,000 riders (Foxborough police).</small></div>
-  <label class="check"><input type="checkbox" id="contra"> <span>Extra northbound lane (contraflow)<br><small class="muted">MassDOT turns one southbound lane northbound for big events.</small></span></label>
-  <div class="field"><label for="budget">Card budget <output id="budgetOut"></output></label><input id="budget" type="range" min="5000" max="150000" step="5000" value="50000"><small>Each car in a delayed lot gets one $50 card, so the budget sets how many cars can be held.</small></div>
-  <div class="field"><label for="release">Delayed lots open at</label><select id="release"><option value="75" selected>75 min after the game (today's rule)</option><option value="45">45 min</option><option value="60">60 min</option><option value="90">90 min</option><option value="105">105 min</option></select></div>
-  <div class="field"><label for="merge">When Route 1 is full at a lot exit</label><select id="merge"><option value="0">Route 1 cars always go first</option><option value="0.25" selected>Route 1 mostly first (our default)</option><option value="0.5">Lots and Route 1 take turns half the time</option><option value="1">Full zipper: lots get their share</option></select><small>How police and drivers share a full merge. Unknown for Gillette until we see it; it changes how much the jam shortens, not which plan is better.</small></div>
-  <button class="primary" id="plan" type="button">Recommend delayed lots</button>
+  <h3>Options</h3>
+  <label class="check opt"><input type="checkbox" id="contra" checked> <span><b>Contraflow lane</b><br><small class="muted">MassDOT turns one southbound lane northbound, toward I-95. Takes a police detail and cones.</small></span></label>
+  <div class="field opt"><label for="staff"><b>Extra staff at the slowest gates</b></label><select id="staff"><option value="0">None</option><option value="3" selected>3 slowest gates</option><option value="6">6 slowest gates</option><option value="10">10 slowest gates</option></select><small>Extra attendants or a second exit lane, so a gate lets out 24 cars a minute instead of 6 to 15.</small></div>
+  <label class="check opt"><input type="checkbox" id="delayedOn" checked> <span><b>Delayed lots</b> ($50 card per car)<br><small class="muted">Gillette's "Be Paid to Park": parking is free, the lot opens later, every car gets a $50 Visa card. The planner picks which lots.</small></span></label>
+  <div id="delayedFields" class="sub">
+    <div class="field"><label for="budget">Card budget <output id="budgetOut"></output></label><input id="budget" type="range" min="5000" max="150000" step="5000" value="50000"></div>
+    <div class="field"><label for="release">Delayed lots open at</label><select id="release"><option value="75" selected>75 min after the game (today's rule)</option><option value="45">45 min</option><option value="60">60 min</option><option value="90">90 min</option><option value="105">105 min</option></select></div>
+  </div>
+  <details class="adv"><summary>Model setting</summary>
+    <div class="field"><label for="merge">When Route 1 is full at a lot exit</label><select id="merge"><option value="0">Route 1 cars always go first</option><option value="0.25" selected>Route 1 mostly first (default)</option><option value="0.5">Lots and Route 1 take turns half the time</option><option value="1">Full zipper: lots get their share</option></select><small>How police and drivers share a full merge (Maggie's merge rule). Unknown for Gillette until counted.</small></div>
+  </details>
+  <button class="primary" id="plan" type="button">Test these options</button>
   <div class="bar" aria-hidden="true"><i id="progress"></i></div>
-  <p class="muted" id="status" role="status">Uses past games saved in this browser.</p>
+  <p class="muted" id="status" role="status">Each option is played on the same night, on a traffic model of Route 1.</p>
 </aside>
 
 <aside class="drawer" id="p-results" aria-labelledby="h-result" hidden>
-  <header><h2 id="h-result">Tonight's plan</h2><button class="min" type="button" data-close title="Fold away (Esc)" aria-label="Fold away"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18 9 12l6-6"/></svg></button></header>
+  <header><h2 id="h-result">Tonight's exit</h2><button class="min" type="button" data-close title="Fold away (Esc)" aria-label="Fold away"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18 9 12l6-6"/></svg></button></header>
   <p class="headline" id="headline"></p>
-  <table>
-    <thead><tr><th scope="col"></th><th scope="col">No delayed lots</th><th scope="col">Today: Lot 55</th><th scope="col">Plan</th></tr></thead>
-    <tbody id="rows"></tbody>
-  </table>
+  <div class="row"><button class="primary" id="watch" type="button">Watch the plan on the map</button><button id="tour" type="button">Explain the screen, step by step</button></div>
+  <h3>Each option, same night</h3>
+  <div class="tablewrap"><table class="opts">
+    <thead><tr><th scope="col">Option</th><th scope="col">Route 1 jammed</th><th scope="col">Avg to highway</th><th scope="col">Over an hour in the car</th><th scope="col">Last car out</th><th scope="col"></th></tr></thead>
+    <tbody id="optRows"></tbody>
+  </table></div>
   <p class="muted" id="fine"></p>
-  <div class="row"><button class="primary" id="watch" type="button">Watch it on the map</button><button id="tour" type="button">Explain the screen, step by step</button></div>
-  <h3>Delayed lots: switch them on and off</h3>
-  <p class="muted">Ranked by idling saved per car held. Tick or untick lots, then test. You can also click a tower on the map.</p>
-  <p class="lotsum" id="lotSum"></p>
-  <ul class="lotlist" id="lotList"></ul>
-  <div class="row"><button class="primary" id="testLots" type="button" disabled>Tested</button><button id="recLots" type="button" hidden>Back to the recommendation</button></div>
-  <h3>When to open them</h3>
-  <p class="advice" id="advice"></p>
-  <h3>What memory changed</h3>
-  <ul class="why" id="why"></ul>
-  <h3>After the game</h3>
-  <p class="muted">Save what happened with this plan: the delayed lots, and how fast each lot's gates really let cars out. The next plan learns from it.</p>
-  <button id="save" type="button">Save this game</button>
-</aside>
-
-<aside class="drawer" id="p-memory" aria-labelledby="h-memory" hidden>
-  <header><h2 id="h-memory">Past games</h2><button class="min" type="button" data-close title="Fold away (Esc)" aria-label="Fold away"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18 9 12l6-6"/></svg></button></header>
-  <p class="muted" id="memNote">Each saved game teaches the planner how fast each lot really empties. Saved in this browser only.</p>
-  <ol class="history" id="history"></ol>
-  <div class="row"><button id="clear" type="button">Forget all</button><button id="export" type="button">Download</button></div>
+  <h3>How the lots open and empty under the plan</h3>
+  <p class="muted">Each bar is when a lot's cars leave, from the whistle. Blue: delayed lot. Green: extra staff. The grey mark is when it emptied with nothing extra. Slowest lots first.</p>
+  <ol class="sched" id="schedule"></ol>
+  <div class="sscale" id="schedScale"></div>
+  <div id="delayedBox">
+    <h3>Delayed lots: switch them on and off</h3>
+    <p class="muted">Tick or untick lots, then test. You can also click a tower on the map.</p>
+    <p class="lotsum" id="lotSum"></p>
+    <ul class="lotlist" id="lotList"></ul>
+    <div class="row"><button class="primary" id="testLots" type="button" disabled>Tested</button><button id="recLots" type="button" hidden>Back to the recommendation</button></div>
+    <h3>When to open them</h3>
+    <p class="advice" id="advice"></p>
+  </div>
 </aside>
 
 <aside class="drawer" id="p-key" aria-labelledby="h-key" hidden>
@@ -212,7 +234,11 @@
     <dt><i class="ring"></i>Red ring: a gate that can't let anyone out</dt>
     <dd>The road outside is full, so the lot is stuck. The red line points to the stretch of Route 1 blocking it.</dd>
     <dt><i class="card"></i>Blue tags: delayed lots in this plan</dt>
-    <dd><b>Click any tower or road bar</b> to fly to it and see what is happening there. A tower's panel can switch that lot between delayed and normal.</dd>
+    <dd>Their fans wait in the stadium; the lot opens at the chosen time.</dd>
+    <dt><i style="background:#0f4d3a;border:1px solid #5fe0b8"></i>Green tags: gates with extra staff</dt>
+    <dd>They let out 24 cars a minute, so the lot empties sooner.</dd>
+    <dt>Click any tower or road bar</dt>
+    <dd>Fly to it and see what is happening there. A tower's panel can switch that lot between delayed and normal.</dd>
   </dl>
   <h3>Moving around</h3>
   <dl class="mapkey">
@@ -224,7 +250,7 @@
 </aside>
 
 <div class="player" id="player" hidden>
-  <div class="seg" role="group" aria-label="Which plan to replay"><button type="button" data-kind="none" aria-pressed="false">No delayed lots</button><button type="button" data-kind="today" aria-pressed="false">Today: Lot 55</button><button type="button" data-kind="ours" aria-pressed="true">Plan</button></div>
+  <div class="seg" role="group" aria-label="Which plan to replay"><button type="button" data-kind="none" aria-pressed="false">Nothing extra</button><button type="button" data-kind="today" aria-pressed="false">Today: Lot 55</button><button type="button" data-kind="plan" aria-pressed="true">Plan</button></div>
   <span class="sep" aria-hidden="true"></span>
   <button class="primary play" id="pause" type="button">Play</button>
   <button id="restart" type="button" title="Back to the whistle" aria-label="Back to the whistle"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/></svg></button>

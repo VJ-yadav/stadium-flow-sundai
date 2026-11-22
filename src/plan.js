@@ -1,23 +1,24 @@
-// The operator's plan: which whole lots become delayed-release lots tonight.
+// The exit planner: before a game, the operator tries the options that change how fast fans get
+// out, on a traffic model of the real Route 1, and sees the result of each one.
 //
-// How the program works (Gillette "Be Paid to Park", 2025 season): parking in a delayed lot is
-// free, fans reserve a spot before the game, the lot is locked 30 min after kickoff, it opens
-// 75 min after the game and every car in it gets a $50 Visa card. So a delayed lot holds every
-// car in it, and the cost is cars x $50. There is no take rate to guess.
+// Options (each can be on or off, and they combine):
+//   contraflow    MassDOT turns one southbound lane northbound: one more lane toward I-95.
+//   gate staff    extra attendants (or a second exit lane) at the gates that take longest to
+//                 empty, so they let out STAFF_RATE cars a minute.
+//   delayed lots  Gillette's "Be Paid to Park" (2025 season): parking is free, the lot opens
+//                 75 min after the game and every car gets a $50 Visa card. The planner picks
+//                 which whole lots, within the card budget.
 //
-// planEvent()  before a game: no delayed lots, today's lot and the recommended (or the operator's
-//              own) set of delayed lots, each measured the way the operator sees the night:
-//              minutes Route 1 is jammed, cars stuck at the worst moment, blocked gates, idling.
-// runEvent()   plays the night for one plan and returns the record the operator saves. The next
-//              planEvent() reads the gate speeds it counted.
+// planExit() measures every option alone and all chosen options together, the same night, and
+// returns what the 3D view needs to replay "nothing extra", "today" and "the plan".
 //
-// trueExit() stands in for the real world: the plan never reads it. It learns each lot's gate
-// speed from saved records. Every rate is an estimate until the venue gives gate counts.
+// Every rate here is an estimate until the venue gives counts, including each lot's gate speed
+// (gateSpeed(): 6 to 24 cars a minute, fixed per lot).
 import { buildCells, nearestCell, Game, rng, OPTIONS, JAM } from './sim.js';
 
 export const CARD_USD = 50;
 export const HOLD_MIN = 75;            // today's rule: delayed lots open 75 min after the game
-export const PRIOR_EXIT = 15;          // cars a minute per lot exit, assumed before any record
+export const STAFF_RATE = 24;          // cars a minute from a staffed gate (estimate)
 export const MIN_LOT_CARS = 50;        // smaller lots are not worth a gate crew
 export const TODAY_LOTS = ['Lot 55'];  // stands in for the stadium's Lots 45 and 55B
 const RIDERS_PER_CAR = 5000 / 1200;    // Foxborough police: 5,000 riders is about 1,200 cars
@@ -31,11 +32,11 @@ export function buildNet(data) {
 }
 
 function hash(s) { let h = 2166136261; for (const ch of s) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); return (h >>> 0) / 4294967296; }
-// Hidden "real" cars a minute a lot's gates let out: 6 to 24, fixed per lot.
-export function trueExit(name) { return Math.round(6 + 18 * hash('exit:' + name)); }
+// Estimated cars a minute each lot's gates let out: 6 to 24, fixed per lot (no counts yet).
+export function gateSpeed(name) { return Math.round(6 + 18 * hash('exit:' + name)); }
 // The same network with each lot's exit rate set.
 export function withExits(net, rates) { return { ...net, lots: net.lots.map((l, i) => ({ ...l, rate: rates[i] })) }; }
-export const realNet = (net) => withExits(net, net.lots.map((l) => trueExit(l.name)));
+export const gateNet = (net, staffed = new Set()) => withExits(net, net.lots.map((l, i) => (staffed.has(i) ? Math.max(STAFF_RATE, gateSpeed(l.name)) : gateSpeed(l.name))));
 
 export function carsAfterTrains(c) { return Math.max(0, c.cars - Math.round((c.trains || 0) / RIDERS_PER_CAR)); }
 
@@ -58,7 +59,7 @@ export function crowd(net, c) {
 }
 
 // c.zipper is optional: how lots and Route 1 share a full merge (see ZIPPER in sim.js).
-const gameOpts = (c) => ({ lanesNorth: c.lanesNorth ?? 2, lanesSouth: c.lanesSouth ?? 2, contraflow: !!c.contraflow, ...(c.zipper != null && { zipper: +c.zipper }) });
+export const gameOpts = (c) => ({ lanesNorth: c.lanesNorth ?? 2, lanesSouth: c.lanesSouth ?? 2, contraflow: !!c.contraflow, ...(c.zipper != null && { zipper: +c.zipper }) });
 
 // Leaving times when the lots in `delayed` (a Set of lot indexes) open at openMin.
 function departures(cr, delayed, openMin) {
@@ -67,54 +68,54 @@ function departures(cr, delayed, openMin) {
   return { dep, held };
 }
 
-// Plays one night and measures it the way the operator sees it, minute by minute.
-//   jamMin          minutes Route 1 has 400 m or more at walking pace (either direction)
-//   peakStuck       cars stuck at the worst moment: waiting in a lot, or on a packed stretch
-//   blockedGateMin  lot-minutes a gate had cars waiting but Route 1 outside was full
-//   idleH           hours spent in a car with the engine on (lot queue + Route 1), all cars
-//   avgHomeMin      whistle to leaving the area, average (Route 1's capacity sets this)
+// Plays one night and measures it the way the operator sees it.
+//   avgHomeMin      whistle to the highway, average driver
+//   over60          drivers who sit more than an hour in their car (lot queue + Route 1)
+//   lastOutMin      when the last car reaches the highway
+//   avgInCarMin     minutes in the car, average driver
+//   heldInCarMin    for delayed-lot fans: minutes in the car after their lot opens
+//   firstOut/cleared per lot: when its first and last car reached Route 1's end (seconds)
+//   jamMin, blockedGateMin (full runs only): minutes Route 1 is jammed, lot-minutes a gate was blocked
 export function measure(net, cr, c, delayed = new Set(), openMin = HOLD_MIN, full = true) {
   const { dep, held } = departures(cr, delayed, openMin);
   const g = new Game(net, { lot: cr.lot, dir: cr.dir, dep }, gameOpts(c));
-  let jamMin = 0, peakStuck = 0, peakAt = 0, blockedGateMin = 0, done = false;
+  let jamMin = 0, blockedGateMin = 0, done = false;
   if (full) {
     while (!done && g.t < 6 * 3600) {
       for (let s = 0; s < 20 && !done; s++) done = g.step();       // one minute
-      let stuck = 0, jammed = false;
-      for (const q of g.lotQ) stuck += q.length;
+      let jammed = false;
       for (let d = 0; d < 2; d++) {
         const cap = JAM * g.lanes[d]; let packed = 0;
-        for (const list of g.cell[d]) if (list.length >= cap) { stuck += list.length; packed++; }
+        for (const list of g.cell[d]) if (list.length >= cap) packed++;
         if (packed >= JAM_CELLS) jammed = true;
       }
       if (jammed) jamMin++;
-      if (stuck > peakStuck) { peakStuck = stuck; peakAt = Math.round(g.t / 60); }
       net.lots.forEach((l, i) => { const q = g.lotQ[i]; if (q.length && g.cell[cr.dir[q[0]]][l.cell].length >= JAM * g.lanes[cr.dir[q[0]]]) blockedGateMin++; });
     }
   } else g.runToEnd();
-  let inCar = 0, home = 0, last = 0, nHeld = 0, heldWait = 0;
-  const cleared = new Float32Array(net.lots.length);
+  let inCar = 0, home = 0, last = 0, nHeld = 0, heldIn = 0, over60 = 0;
+  const L = net.lots.length, cleared = new Float32Array(L), firstOut = new Float32Array(L).fill(Infinity), emptyAt = new Float32Array(L);
   for (let k = 0; k < cr.N; k++) {
-    const o = g.state[k] === 3 ? g.out[k] : g.t;
-    inCar += o - dep[k]; home += o; if (o > last) last = o;
-    if (o > cleared[cr.lot[k]]) cleared[cr.lot[k]] = o;
-    if (held[k]) { nHeld++; heldWait += dep[k] - cr.base[k]; }
+    const o = g.state[k] === 3 ? g.out[k] : g.t, t = o - dep[k], l = cr.lot[k];
+    inCar += t; home += o; if (o > last) last = o; if (t > 3600) over60++;
+    if (o > cleared[l]) cleared[l] = o;
+    const e = g.enter[k] || o; if (e < firstOut[l]) firstOut[l] = e; if (e > emptyAt[l]) emptyAt[l] = e;
+    if (held[k]) { nHeld++; heldIn += t; }
   }
   const n = cr.N || 1;
   return {
-    game: g, dep, held, cleared,
+    game: g, dep, held, cleared, firstOut, emptyAt,
     m: {
       lots: delayed.size, held: nHeld, spent: nHeld * CARD_USD, openMin,
-      jamMin, peakStuck, peakAt, blockedGateMin,
-      idleH: Math.round(inCar / 3600), avgInCarMin: +(inCar / n / 60).toFixed(1),
-      avgHomeMin: +(home / n / 60).toFixed(1), lastOutMin: Math.round(last / 60),
-      heldWaitMin: nHeld ? Math.round(heldWait / nHeld / 60) : 0,
+      avgHomeMin: +(home / n / 60).toFixed(1), over60, lastOutMin: Math.round(last / 60),
+      avgInCarMin: +(inCar / n / 60).toFixed(1), heldInCarMin: nHeld ? Math.round(heldIn / nHeld / 60) : 0,
+      idleH: Math.round(inCar / 3600), jamMin, blockedGateMin,
     },
   };
 }
 
-// Each lot's worth as a delayed lot: idling minutes saved for everyone, per car held there,
-// if that lot alone were delayed. Cached per night and gate speeds.
+// Each lot's worth as a delayed lot (for ordering the list): minutes in the car saved for
+// everyone, per car held there, if that lot alone were delayed.
 const valueCache = new Map();
 export function lotValues(net, cr, c, openMin, onProgress) {
   const key = JSON.stringify([cr.N, c.shareNorth ?? 0.6, gameOpts(c), openMin, net.lots.map((l) => l.rate)]);
@@ -130,26 +131,14 @@ export function lotValues(net, cr, c, openMin, onProgress) {
   return values;
 }
 
-// What the operator believes about each lot's gates, from saved records (newest first).
-export function beliefs(net, records = []) {
-  return net.lots.map((l) => {
-    const exits = []; let exitFrom = null;
-    for (const r of records) { const e = r.result?.exitPerMin?.[l.name]; if (e > 0) { exits.push(e); exitFrom ??= r.id; } }
-    return { exit: exits.length ? exits.reduce((a, b) => a + b, 0) / exits.length : PRIOR_EXIT, exitFrom };
-  });
-}
-
-// What the operator wants less of, each as a share of the night with no delayed lots, weighted
-// equally: minutes Route 1 is jammed, gate-minutes blocked, engine-idling hours. Shares, so no
-// one number swamps the others whatever the merge rule (with a full zipper merge the jam
-// barely moves, but blocked gates and idling still do).
+// Delayed lots are scored on what they can change: drivers stuck over an hour, minutes in the
+// car, and blocked gates, each as a share of the same night without them, weighted equally.
 const share = (x, b) => x / Math.max(1, b);
-const score = (m, base) => share(m.jamMin, base.jamMin) + share(m.blockedGateMin, base.blockedGateMin) + share(m.idleH, base.idleH);
+const score = (m, base) => share(m.over60, base.over60) + share(m.idleH, base.idleH) + share(m.blockedGateMin, base.blockedGateMin);
 
-// Lots chosen one at a time: each step adds the lot that cuts the score most per dollar, tried
-// together with the lots already chosen (lots interact: two lots on the same stretch of
-// Route 1 help less than two on different stretches). Stops when the budget is spent or no lot
-// helps. Cached per night, gate speeds, budget and opening time.
+// Lots chosen one at a time: each step adds the lot that helps most per dollar, tried together
+// with the lots already chosen (two lots on the same stretch of Route 1 help less than two on
+// different stretches). Stops when the budget is spent or no lot helps.
 const recCache = new Map();
 function recommend(net, cr, c, openMin, base, onProgress) {
   const key = JSON.stringify([cr.N, c.shareNorth ?? 0.6, gameOpts(c), openMin, c.budget, net.lots.map((l) => l.rate)]);
@@ -173,96 +162,60 @@ function recommend(net, cr, c, openMin, base, onProgress) {
   recCache.set(key, [...set]);
   return set;
 }
-const better = (a, b, base) => score(a, base) < score(b, base);
 
-function vsBase(m, base) {
-  const idleSavedH = base.idleH - m.idleH;
-  return { ...m, idleSavedH, jamCutMin: base.jamMin - m.jamMin, peakCut: base.peakStuck - m.peakStuck, blockedCut: base.blockedGateMin - m.blockedGateMin,
-    hPerThousand: m.spent ? +(idleSavedH / (m.spent / 1000)).toFixed(1) : 0 };
+// The gates that take longest to empty: cars in the lot / cars a minute its gate lets out.
+export function slowestGates(net, cr, n) {
+  return new Set(net.lots.map((l, i) => i).filter((i) => cr.sizes[i] >= MIN_LOT_CARS)
+    .sort((a, b) => cr.sizes[b] / gateSpeed(net.lots[b].name) - cr.sizes[a] / gateSpeed(net.lots[a].name)).slice(0, n));
 }
+
 const names = (net, set) => [...set].map((i) => net.lots[i].name);
 const indexes = (net, list) => new Set(list.map((n) => net.lots.findIndex((l) => l.name === n)).filter((i) => i >= 0));
 
-// Before a game. picked: the operator's own list of lot names, or null for the recommendation.
-export function planEvent(net0, c, records = [], onProgress, picked = null) {
-  const bel = beliefs(net0, records);
-  const net = withExits(net0, bel.map((b) => b.exit));
-  const cr = crowd(net, c), openMin = c.releaseMin || HOLD_MIN;
-  const values = lotValues(net, cr, c, openMin, (i, n) => onProgress?.(i, n * 6));
-  const base = measure(net, cr, c).m;
-  const mk = (kind, set, open) => ({ kind, lots: names(net, set), releaseMin: open, budget: c.budget, result: vsBase(measure(net, cr, c, set, open).m, base) });
-  const today = mk('today', indexes(net, TODAY_LOTS), HOLD_MIN);
-  let rec = recommend(net, cr, c, openMin, base, (i, n) => onProgress?.(n / 5 + i, n + n / 5)), fallback = false;
-  let ours = mk('ours', picked ? indexes(net, picked) : rec, openMin);
-  if (!picked && better(today.result, ours.result, base)) { rec = indexes(net, TODAY_LOTS); ours = mk('ours', rec, openMin); fallback = true; }
-  ours.own = !!picked;
-  const releaseTest = testRelease(net, cr, c, base, indexes(net, ours.lots));
-  const whyLines = why(net0, records, bel, rec, values);
-  if (fallback) whyLines.unshift("For this game no set of lots beat today's lot, so the plan keeps today's lot.");
+// Before a game. c: cars, trains, zipper, and the options chosen:
+//   contraflow (bool), staff (number of slowest gates to staff, 0 = none),
+//   delayed (bool), budget, releaseMin. picked: the operator's own delayed lots, or null.
+export function planExit(net0, c, onProgress, picked = null) {
+  const open = c.releaseMin || HOLD_MIN, nStaff = c.staff || 0;
+  const plain = gateNet(net0), cr = crowd(plain, c);
+  const staffed = slowestGates(plain, cr, nStaff), withStaff = gateNet(net0, staffed);
+  const off = { ...c, contraflow: false };
+  // Delayed lots are chosen for the night as the plan will run it (with its lane and its staff).
+  const ctxNet = nStaff ? withStaff : plain, ctxC = { ...c, contraflow: !!c.contraflow };
+  const values = lotValues(ctxNet, cr, ctxC, open, (i, n) => onProgress?.(i, n * 6));
+  let delayed = new Set();
+  if (c.delayed) delayed = picked ? indexes(plain, picked) : recommend(ctxNet, cr, ctxC, open, measure(ctxNet, cr, ctxC).m, (i, n) => onProgress?.(n / 5 + i, n + n / 5));
+  const recommended = c.delayed && !picked ? names(plain, delayed) : (c.delayed ? names(plain, recommend(ctxNet, cr, ctxC, open, measure(ctxNet, cr, ctxC).m)) : []);
+
+  const run = (key, name, { cf = false, staff = false, lots = new Set() }) => {
+    const net = staff ? withStaff : plain, cc = cf ? { ...c, contraflow: true } : off;
+    const r = measure(net, cr, cc, lots, open);
+    return { key, name, contraflow: cf, staffed: staff ? names(plain, staffed) : [], lots: names(plain, lots), releaseMin: open, m: r.m,
+      replay: { dep: r.dep, held: r.held, rates: Float32Array.from(net.lots, (l) => l.rate), contraflow: cf },
+      schedule: net.lots.map((l, i) => ({ lot: l.name, cars: cr.sizes[i], gate: l.rate, staffed: staff && staffed.has(i), delayed: lots.has(i),
+        firstOutMin: cr.sizes[i] && isFinite(r.firstOut[i]) ? Math.round(r.firstOut[i] / 60) : null, emptyMin: cr.sizes[i] ? Math.round(r.emptyAt[i] / 60) : null })) };
+  };
+  const options = [run('none', 'Nothing extra', {}), run('today', 'Today: Lot 55 delayed', { lots: indexes(plain, TODAY_LOTS) })];
+  if (c.contraflow) options.push(run('contraflow', 'Contraflow lane', { cf: true }));
+  if (nStaff) options.push(run('staff', `Extra staff at the ${nStaff} slowest gates`, { staff: true }));
+  if (c.delayed) options.push(run('delayed', `${delayed.size} delayed lots`, { lots: delayed }));
+  const chosen = [c.contraflow && 'contraflow', nStaff && `staff at ${nStaff} gates`, c.delayed && `${delayed.size} delayed lots`].filter(Boolean);
+  const plan = run('plan', chosen.length ? `Plan: ${chosen.join(' + ')}` : 'Plan: nothing chosen', { cf: !!c.contraflow, staff: nStaff > 0, lots: delayed });
+  plan.own = !!picked;
+  options.push(plan);
   return {
-    conditions: c, cars: cr.N, base, today, ours, recommended: names(net, rec), releaseTest, why: whyLines,
-    values: net.lots.map((l, i) => ({ lot: l.name, i, cars: cr.sizes[i], cost: cr.sizes[i] * CARD_USD, value: +values[i].toFixed(1) })).sort((a, b) => b.value - a.value),
-    beliefs: bel.map((b, i) => ({ lot: net.lots[i].name, exit: +b.exit.toFixed(1), exitFrom: b.exitFrom })),
+    conditions: c, cars: cr.N, options, plan, recommended, staffed: names(plain, staffed),
+    releaseTest: c.delayed ? testRelease(ctxNet, cr, ctxC, delayed) : null,
+    values: plain.lots.map((l, i) => ({ lot: l.name, i, cars: cr.sizes[i], cost: cr.sizes[i] * CARD_USD, gate: gateSpeed(l.name), value: +values[i].toFixed(1) })).sort((a, b) => b.value - a.value),
   };
 }
 
 // When should the delayed lots open? Too early and they drive into the jam; too late and the
-// fans wait for nothing. Advice: the earliest time that gets 90% of the best idling saved.
+// fans wait for nothing. Advice: the earliest time within 2% of the fewest drivers over an hour.
 export const RELEASE_OPTIONS = [45, 60, 75, 90, 105];
-function testRelease(net, cr, c, base, set) {
-  if (!set.size) return { rows: [], pick: HOLD_MIN };
-  const rows = RELEASE_OPTIONS.map((min) => { const m = measure(net, cr, c, set, min).m; return { min, idleSavedH: base.idleH - m.idleH, jamMin: m.jamMin, heldWaitMin: m.heldWaitMin }; });
-  const best = Math.max(...rows.map((r) => r.idleSavedH));
-  return { rows, pick: rows.find((r) => r.idleSavedH >= 0.9 * best)?.min ?? HOLD_MIN };
-}
-
-// Plays the night for a plan with the real gate speeds and returns the record to save.
-export function runEvent(net0, c, plan, id) {
-  const net = realNet(net0), cr = crowd(net, c);
-  const set = indexes(net, plan.lots || []);
-  const base = measure(net, cr, c).m;
-  const run = measure(net, cr, c, set, plan.releaseMin);
-  const clearedMin = {};
-  net.lots.forEach((l, i) => { if (cr.sizes[i]) clearedMin[l.name] = Math.round(run.cleared[i] / 60); });
-  return {
-    record: { id, venue: 'gillette', conditions: c, plan: { kind: plan.kind, lots: plan.lots || [], releaseMin: plan.releaseMin, budget: plan.budget },
-      result: { ...vsBase(run.m, base), clearedMin, exitPerMin: gateCounts(net, cr, run.game) } },
-    dep: run.dep, held: run.held,
-  };
-}
-
-// What a gate counter would show: each lot's cars a minute in its 5 busiest minutes.
-// Only cars that had to queue at the gate count (otherwise a quiet gate looks slow), and a lot
-// needs at least 100 queued cars to give a reading; smaller lots keep the assumed speed.
-const MIN_QUEUED = 100;
-function gateCounts(net, cr, game) {
-  const per = net.lots.map(() => new Map()), queued = new Int32Array(net.lots.length), out = {}, dep = game.cars.dep;
-  for (let k = 0; k < cr.N; k++) {
-    if (game.state[k] < 2 || game.enter[k] - dep[k] < 60) continue;
-    const l = cr.lot[k], m = Math.floor(game.enter[k] / 60), p = per[l];
-    p.set(m, (p.get(m) || 0) + 1); queued[l]++;
-  }
-  per.forEach((p, l) => {
-    if (queued[l] < MIN_QUEUED) return;
-    const top = [...p.values()].sort((a, b) => b - a).slice(0, 5);
-    out[net.lots[l].name] = +(top.reduce((a, b) => a + b, 0) / top.length).toFixed(1);
-  });
-  return out;
-}
-
-// Plain lines saying what memory changed in this plan, each naming its record.
-// Compares tonight's recommendation with the lots used in the last saved game.
-function why(net0, records, bel, rec, values) {
-  if (!records.length) return [`No past games yet. Every lot's gate is assumed to let out ${PRIOR_EXIT} cars a minute. Save tonight's game and the next plan uses the real counts.`];
-  const last = records[0], lastLots = new Set(last.plan?.lots || []), lines = [];
-  const counted = Object.keys(last.result?.exitPerMin || {}).length;
-  lines.push(`Using gate counts from ${records.length} saved game${records.length === 1 ? '' : 's'} (${counted} lots counted in ${last.id}).`);
-  const changed = net0.lots.map((l, i) => i).filter((i) => rec.has(i) !== lastLots.has(net0.lots[i].name));
-  for (const i of changed.slice(0, 4)) {
-    const b = bel[i], n = net0.lots[i].name;
-    const gate = b.exitFrom ? `its gate let out about ${Math.round(b.exit)} cars a minute in ${b.exitFrom} (we had assumed ${PRIOR_EXIT})` : 'no gate count yet';
-    lines.push(`${n}: ${gate}. ${rec.has(i) ? 'Now a delayed lot' : 'No longer a delayed lot'} (about ${Math.round(values[i])} idling minutes saved per car held).`);
-  }
-  if (changed.length === 0) lines.push(`Same delayed lots as ${last.id}: the counts confirmed them.`);
-  return lines;
+function testRelease(net, cr, c, set) {
+  if (!set.size) return null;
+  const rows = RELEASE_OPTIONS.map((min) => { const m = measure(net, cr, c, set, min, false).m; return { min, over60: m.over60, avgHomeMin: m.avgHomeMin, heldInCarMin: m.heldInCarMin }; });
+  const best = Math.min(...rows.map((r) => r.over60));
+  return { rows, pick: rows.find((r) => r.over60 <= best * 1.02)?.min ?? HOLD_MIN };
 }
