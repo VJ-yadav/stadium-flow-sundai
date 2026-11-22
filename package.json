@@ -9,6 +9,7 @@
     "data": "python3 -I scripts/build_data.py"
   },
   "dependencies": {
+    "@localmem/memory": "^0.1.2",
     "3d-tiles-renderer": "^0.5.4",
     "three": "^0.187.0"
   },

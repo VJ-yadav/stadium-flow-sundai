@@ -4,3 +4,5 @@ dist/
 !.env.example
 data/raw/
 .DS_Store
+server/data/
+.vercel/
