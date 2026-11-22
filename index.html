@@ -44,14 +44,27 @@
   .hud .title { grid-column:1/-1; font:600 13px var(--body); color:var(--amber) }
   .side { position:fixed; right:12px; bottom:12px; width:330px; max-height:42%; overflow:auto; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; display:grid; gap:8px }
   .side ol { margin:0; padding-left:18px; display:grid; gap:6px; font-size:13px } .side li span { color:var(--muted) }
-  .legend { position:fixed; left:384px; bottom:12px; display:flex; flex-wrap:wrap; gap:12px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:6px 10px; font-size:12px; max-width:calc(100% - 740px) }
-  .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; vertical-align:-1px } .legend i.ring { border:2px solid var(--red); background:none; border-radius:50% }
-  .attr { position:fixed; left:384px; bottom:46px; font-size:11px; color:var(--muted); max-width:50ch }
+  .mapkey summary { cursor:pointer; list-style:none } .mapkey summary h2 { display:inline } .mapkey summary::after { content:' (hide)'; color:var(--muted); font-size:12px } .mapkey:not([open]) summary::after { content:' (show)' }
+  .mapkey { position:fixed; left:384px; bottom:12px; width:290px; max-height:46%; overflow:auto; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-size:12.5px }
+  .mapkey dl { margin:6px 0 0; display:grid; gap:2px } .mapkey dt { font-weight:600; margin-top:6px; display:flex; gap:8px; align-items:center } .mapkey dd { margin:0 0 0 22px; color:var(--muted); line-height:1.35 }
+  .mapkey i { flex:none; display:inline-block; width:14px; height:14px; border-radius:3px } .mapkey i.ring { border:3px solid var(--red); border-radius:50%; width:10px; height:10px }
+  .mapkey i.card { background:rgba(30,70,120,.9); border:1px solid var(--blue) }
+  .mapkey i.tower { display:inline-flex; flex-direction:column; width:10px; height:18px; border-radius:2px; overflow:hidden } .mapkey i.tower b { flex:1 }
+  .attr { position:fixed; left:700px; bottom:14px; font-size:11px; color:var(--muted); max-width:40ch }
+  .story { position:fixed; left:384px; top:12px; width:440px; background:rgba(12,16,19,.96); border:1px solid var(--amber); border-radius:10px; padding:12px 14px; display:grid; gap:6px; box-shadow:0 8px 30px rgba(0,0,0,.4) }
+  .story[hidden], .info[hidden] { display:none } .story h3 { margin:0; font:700 20px var(--display) } .story p { margin:0 } .story .step { font:500 11px var(--mono); color:var(--amber); text-transform:uppercase; letter-spacing:.06em }
+  .info { position:fixed; right:12px; top:110px; width:330px; max-height:calc(58% - 130px); overflow:auto; background:rgba(12,16,19,.96); border:1px solid var(--blue); border-radius:10px; padding:12px 14px; font-size:13px }
+  .info h3 { margin:0 0 4px; font:700 20px var(--display) } .info p { margin:4px 0 } .info .k { color:var(--muted) } .info .x { position:absolute; right:8px; top:6px; border:0; background:none; font-size:20px; padding:2px 6px }
+  .info .tag { display:inline-block; font:600 11px var(--mono); padding:1px 6px; border-radius:3px; background:rgba(255,77,77,.2); color:var(--red) } .info .tag.ok { background:rgba(52,198,168,.2); color:var(--teal) }
+  .lbl.tower { font:600 11px var(--body); background:rgba(10,12,14,.8); border:1px solid rgba(255,255,255,.25) }
+  .lbl.tower.sel { border-color:var(--amber); color:var(--amber) }
+  .jumps { display:flex; flex-wrap:wrap; gap:6px; align-items:center } .jumps button { padding:4px 8px; font-size:12px; font-weight:500 }
   .lbl { font:600 12px var(--body); color:#fff; background:rgba(10,12,14,.72); padding:2px 6px; border-radius:4px; white-space:nowrap; pointer-events:none }
   .lbl.big { font:700 14px var(--display); letter-spacing:.04em; text-transform:uppercase; background:var(--sign); border:1px solid rgba(255,255,255,.6) }
   .lbl.card { background:rgba(30,70,120,.9); border:1px solid var(--blue) }
   .bar { height:4px; background:var(--line); border-radius:2px; overflow:hidden } .bar i { display:block; height:100%; width:0; background:var(--amber); transition:width .2s }
-  @media (max-width: 900px) { .panel { width:auto; right:12px; bottom:auto; max-height:55% } .hud { display:none } .side, .legend, .attr { display:none } }
+  @media (max-width: 1200px) { .side { display:none } .info { max-height:calc(100% - 140px) } }
+  @media (max-width: 900px) { .panel { width:auto; right:12px; bottom:auto; max-height:55% } .hud { display:none } .side, .mapkey, .attr { display:none } .story { left:12px; right:12px; width:auto; top:auto; bottom:12px } }
 </style>
 </head>
 <body>
@@ -88,8 +101,10 @@
   <section aria-labelledby="h-replay" id="replayBox" hidden>
     <h2 id="h-replay">3 · Watch it on Route 1</h2>
     <div class="seg" role="group" aria-label="Which plan to replay"><button type="button" data-kind="none" aria-pressed="false">No cards</button><button type="button" data-kind="today" aria-pressed="false">Today's lot</button><button type="button" data-kind="ours" aria-pressed="true">Our lots</button></div>
-    <div class="field"><label for="speed">Speed <output id="speedOut"></output></label><input id="speed" type="range" min="30" max="600" step="30" value="180"></div>
-    <div class="row"><button id="pause" type="button">Pause</button><button id="restart" type="button">Restart</button></div>
+    <button class="primary" id="tour" type="button">Explain the screen, step by step</button>
+    <div class="row"><button id="pause" type="button">Play</button><button id="restart" type="button">Back to the whistle</button></div>
+    <div class="jumps" role="group" aria-label="Jump to a moment"><span class="muted">Jump to:</span><button type="button" data-min="0">Whistle</button><button type="button" data-min="20">20 min</button><button type="button" data-min="45">45 min</button><button type="button" data-min="76">Card lots open</button><button type="button" data-min="120">2 hours</button></div>
+    <div class="field"><label for="speed">Speed <output id="speedOut"></output></label><input id="speed" type="range" min="30" max="600" step="30" value="120"></div>
   </section>
 
   <section aria-labelledby="h-save" id="saveBox" hidden>
@@ -115,13 +130,35 @@
   <div class="row"><button id="clear" type="button">Forget all</button><button id="export" type="button">Download</button></div>
 </aside>
 
-<div class="legend">
-  <span><i style="background:#f2a516"></i>Cars trying to leave</span>
-  <span><i style="background:#5aa9ff"></i>Card holders, staying</span>
-  <span><i style="background:#6b7680"></i>Not left yet</span>
-  <span><i style="background:linear-gradient(90deg,#34c6a8,#f2a516,#ff4d4d)"></i>Route 1: free to packed</span>
-  <span><i class="ring"></i>Gate blocked by the jam</span>
-</div>
+<details class="mapkey" open aria-label="How to read the map">
+  <summary><h2>How to read the map</h2></summary>
+  <dl>
+    <dt><i class="tower"><b style="background:#6b7680"></b><b style="background:#5aa9ff"></b><b style="background:#f2a516"></b></i>Each tower is one parking lot</dt>
+    <dd>Its height is the cars still in it (1,000 cars is about 200 m tall). It shrinks as the lot empties.</dd>
+    <dt><i style="background:#f2a516"></i>Amber: drivers in their car, trying to get out</dt>
+    <dd>Engine running, not moving yet. This is the time we want to cut.</dd>
+    <dt><i style="background:#5aa9ff"></i>Blue: card holders staying on purpose</dt>
+    <dd>They took the $50 Visa card and wait in the stadium or at Patriot Place until their lot opens.</dd>
+    <dt><i style="background:#6b7680"></i>Grey: not at their car yet</dt>
+    <dd>Still in their seats or walking to the lot.</dd>
+    <dt><i style="background:linear-gradient(90deg,#34c6a8,#f2a516,#ff4d4d)"></i>Bars along Route 1: the queue</dt>
+    <dd>One bar per 40 m of road; each side is one direction. Green is moving, tall and red is packed (walking pace).</dd>
+    <dt><i class="ring"></i>Red ring: a gate that can't let anyone out</dt>
+    <dd>The road outside is full, so the lot is stuck. The red line points to the stretch of Route 1 blocking it.</dd>
+    <dt><i class="card"></i>Blue tags: lots that got cards in this plan</dt>
+    <dd><b>Click any tower or road bar</b> to see what is happening there.</dd>
+  </dl>
+</details>
+<aside class="story" id="story" hidden aria-live="polite">
+  <p class="step" id="storyStep"></p>
+  <h3 id="storyTitle"></h3>
+  <p id="storyText"></p>
+  <div class="row"><button id="storyPrev" type="button">Back</button><button class="primary" id="storyNext" type="button">Next</button><button id="storyClose" type="button">Close</button></div>
+</aside>
+<aside class="info" id="info" hidden aria-live="polite">
+  <button class="x" id="infoClose" type="button" aria-label="Close">×</button>
+  <div id="infoBody"></div>
+</aside>
 <div class="attr" id="attr">Map data © OpenStreetMap contributors (ODbL)</div>
 <script type="module" src="/src/main.js"></script>
 </body>

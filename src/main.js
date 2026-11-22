@@ -177,18 +177,28 @@ function startReplay(kind) {
   const r = runs[kind];
   cr = crowd(net, conditions);
   game = new Game(REAL, { lot: cr.lot, dir: cr.dir, dep: r.dep }, gameOpts(conditions));
-  held = r.held; running = true; paused = false; simAcc = 0;
-  $('pause').textContent = 'Pause';
+  // Start paused at the whistle so the screen can be explained before anything moves.
+  held = r.held; running = true; paused = true; simAcc = 0;
+  $('pause').textContent = 'Play';
   document.querySelectorAll('.seg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.kind === kind)));
   $('hTitle').textContent = { none: 'No cards', today: "Today's lot (Lot 55)", ours: 'Our lots' }[kind] + (kind === 'none' ? '' : ` · card lots open at ${r.record.plan.releaseMin} min`);
-  // label the lots that got cards in this plan
-  cardLabels.forEach((o) => overlay.remove(o)); cardLabels = [];
-  const cards = r.record.plan.cards || {};
-  Object.entries(cards).sort((a, b) => b[1] - a[1]).slice(0, 8).forEach(([name, n]) => {
-    const i = lots.findIndex((l) => l.name === name); if (i < 0) return;
-    cardLabels.push(label(`${name.replace('Parking ', '')} · ${fmt(n)} cards`, lots[i].c[0], 30, lots[i].c[1], 'card'));
-  });
+  cardsNow = r.record.plan.cards || {};
+  if (selected) showInfo(selected);
 }
+
+// Move the replay to a minute after the game (replaying from the whistle if going back).
+function seekTo(min) {
+  if (!runs) return;
+  if (!game || game.t > min * 60) startReplay(view);
+  while (game.t < min * 60) if (game.step()) break;
+  paused = true; $('pause').textContent = 'Play';
+  if (selected) showInfo(selected);
+}
+
+// Tower labels: lot name and cars still inside, on top of each tower.
+const short = (n) => n.replace('Parking ', '').replace('Unnamed lot', 'Lot #');
+const towerLabels = lots.map((l) => { const o = label('', l.c[0], 0, l.c[1], 'tower'); o.visible = false; return o; });
+let cardsNow = {}, lastCounts = null, labelTick = 0, selected = null;
 
 function drawLayers() {
   if (!game) { colMesh.count = 0; roadMesh.count = 0; ringMesh.count = 0; return; }
@@ -203,6 +213,8 @@ function drawLayers() {
     else counts[l][2]++;
   }
   let inLots = 0, onRoad = 0, blocked = 0;
+  const updLabels = (labelTick = (labelTick + 1) % 10) === 0;
+  lastCounts = counts; lastCounts.blocked = [];
   lots.forEach((lot, l) => {
     let y = 0.6 + lotY[l];
     for (let s = 0; s < 3; s++) {
@@ -211,9 +223,19 @@ function drawLayers() {
       M.compose(P.set(lot.c[0], y, lot.c[1]), Q.identity(), S.set(colW[l], h, colW[l]));
       colMesh.setMatrixAt(l * 3 + s, M); colMesh.setColorAt(l * 3 + s, SEG[s]); y += h;
     }
+    if (updLabels) {
+      const total = counts[l][0] + counts[l][1] + counts[l][2], o = towerLabels[l], cards = cardsNow[lot.name];
+      o.visible = total >= 400 || (cards || 0) >= 60 || selected?.lot === l;
+      if (o.visible) {
+        o.position.y = y + 14;
+        o.element.textContent = `${short(lot.name)} · ${fmt(total)} cars${cards ? ` · ${fmt(cards)} cards` : ''}`;
+        o.element.className = 'lbl tower' + (cards ? ' card' : '') + (selected?.lot === l ? ' sel' : '');
+      }
+    }
     // blocked gate: cars queued at the gate and the Route 1 stretch it joins is full
     const c = lot.cell, waiting = game.lotQ[l].length > 0;
     const first = game.lotQ[l][0], full = waiting && game.cell[cr.dir[first]][c].length >= JAM * game.lanes[cr.dir[first]];
+    lastCounts.blocked[l] = full;
     if (full) {
       blocked++;
       M.compose(P.set(lot.c[0], 2 + lotY[l], lot.c[1]), Q.identity(), S.setScalar(colW[l] * 0.9 + 10)); ringMesh.setMatrixAt(l, M);
@@ -250,7 +272,7 @@ worker.onmessage = (e) => {
   lastPlan = m.plan; runs = m.runs;
   $('progress').style.width = '100%';
   $('plan').disabled = false; $('plan').textContent = 'Plan this game';
-  $('status').textContent = `Planned for ${fmt(lastPlan.cars)} cars, using ${listEvents().length} past game(s). Numbers below are what actually happened when each plan was played.`;
+  $('status').textContent = `Planned for ${fmt(lastPlan.cars)} cars, using ${listEvents().length} past game(s). The replay is paused at the whistle: press Play, or Explain the screen.`;
   showResult(); startReplay('ours');
 };
 
@@ -295,12 +317,92 @@ function renderHistory() {
   $('history').innerHTML = ev.length ? ev.map((r) => `<li><strong>${r.id}</strong>: ${fmt(r.conditions.cars)} cars, ${r.conditions.contraflow ? 'contraflow, ' : ''}$${fmt(r.plan.budget)} of cards<br><span>${Math.round(r.result.avgInCarMin)} min in the car on average, ${fmt(r.result.perThousand)} min saved per $1,000; gate speeds counted in ${Object.keys(r.result.exitPerMin || {}).length} lots</span></li>`).join('') : '<li><span>None yet. Plan a game, then save it.</span></li>';
 }
 
+// ---------- click a tower or a road bar to see what is happening there ----------
+const picker = new THREE.Raycaster(), pointer = new THREE.Vector2();
+let downAt = null;
+renderer.domElement.addEventListener('pointerdown', (e) => { downAt = [e.clientX, e.clientY]; });
+renderer.domElement.addEventListener('pointerup', (e) => {
+  if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5 || !game) return; // a drag, not a click
+  pointer.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  picker.setFromCamera(pointer, camera);
+  const hit = picker.intersectObjects([colMesh, roadMesh], false)[0];
+  if (!hit) return;
+  selected = hit.object === colMesh ? { lot: Math.floor(hit.instanceId / 3) } : { dir: Math.floor(hit.instanceId / cells.length), cell: hit.instanceId % cells.length };
+  showInfo(selected);
+});
+$('infoClose').addEventListener('click', () => { selected = null; $('info').hidden = true; });
+
+function showInfo(sel) {
+  if (!game || !lastCounts) return;
+  const min = Math.round(game.t / 60), planName = { none: 'no cards', today: "today's lot", ours: 'our lots' }[view];
+  let html;
+  if (sel.lot !== undefined) {
+    const l = sel.lot, lot = lots[l], [leaving, staying, notYet] = lastCounts[l], cards = cardsNow[lot.name] || 0;
+    const kmFrom = (cells[lot.cell].s / 1000).toFixed(1);
+    const b = lastPlan?.beliefs?.[l], val = (d) => lastPlan?.values?.find((v) => v.lot === lot.name && v.dir === d)?.value;
+    const vn = val('north'), vs = val('south');
+    const gate = b?.exitFrom ? `measured at about <b>${Math.round(b.exit)} cars a minute</b> (saved game ${b.exitFrom})` : `assumed <b>15 cars a minute</b> (no gate count saved yet)`;
+    html = `<h3>${lot.name}</h3>
+      <p class="k">${lot.side === 'east' ? 'East' : 'West'} of Route 1 · about ${fmt(lot.capEst)} spaces (estimate) · joins Route 1 ${kmFrom} km from the south end</p>
+      <p><b>Minute ${min}, ${planName}:</b> ${fmt(leaving)} drivers in their cars trying to get out, ${fmt(staying)} card holders staying, ${fmt(notYet)} not at their car yet.</p>
+      <p>Gate: ${lastCounts.blocked[l] ? '<span class="tag">BLOCKED</span> Route 1 outside is full, so nobody can get out right now.' : leaving ? '<span class="tag ok">MOVING</span> cars are getting out.' : '<span class="tag ok">CLEAR</span> no queue.'}</p>
+      <p>Gate speed: ${gate}.</p>
+      <p>Cards in this plan: <b>${cards ? fmt(cards) + ' ($' + fmt(cards * CARD_USD) + ')' : 'none'}</b>.</p>
+      ${vn !== undefined ? `<p class="k">Why: one northbound car held here saves about <b>${Math.round(vn)} minutes</b> of driving in total${vs !== undefined ? `; a southbound car about ${Math.round(vs)}` : ''}. Cards go where this number is highest.</p>` : ''}`;
+  } else {
+    const n = game.cell[sel.dir][sel.cell].length, cap = JAM * game.lanes[sel.dir], f = n / cap;
+    const feeders = lots.filter((x) => (sel.dir === 0 ? x.cell <= sel.cell : x.cell >= sel.cell)).length;
+    html = `<h3>Route 1 ${sel.dir === 0 ? 'northbound, to I-95' : 'southbound, to I-495'}</h3>
+      <p class="k">40 m stretch, ${(cells[sel.cell].s / 1000).toFixed(1)} km from the south end · ${game.lanes[sel.dir]} lane(s)</p>
+      <p><b>Minute ${min}:</b> ${n} cars in this stretch, room for ${cap}.</p>
+      <p>${f >= 1 ? '<span class="tag">PACKED</span> Full: cars move at walking pace and lots joining here are blocked.' : f > 0.5 ? '<span class="tag">SLOW</span> Busy: cars are stop-and-go.' : '<span class="tag ok">MOVING</span> Traffic flows.'}</p>
+      <p class="k">${feeders} lots feed this direction at or before this point. A full stretch here blocks the gates behind it.</p>`;
+  }
+  $('infoBody').innerHTML = html; $('info').hidden = false;
+}
+
+// ---------- the guided tour: one moment at a time, paused ----------
+const TOUR = [
+  { min: 0, title: 'The final whistle', text: 'Each tower is one parking lot. Its height is the cars still in it. Grey means fans are still in the stadium or walking to their car. About 13,000 cars need to leave through one road: Route 1.' },
+  { min: 20, title: '20 minutes: everyone heads for the car', text: 'Amber is drivers sitting in their car with the engine running, waiting to get out of the lot. Most fans leave in the first 15 minutes, so the towers turn amber together.' },
+  { min: 30, title: 'Route 1 fills up', text: 'The bars along Route 1 are the queue: one bar per 40 m of road. Tall and red means packed. The northbound side (to I-95) fills first because 60% of cars go north.' },
+  { min: 35, title: 'The broken part: blocked gates', text: 'A red ring means that lot cannot let anyone out, because the road outside its exit is full. The red line points to the stretch blocking it. This is why people sit in the lot for an hour: not the lot itself, the road backing up into it.' },
+  { min: 45, title: 'Card holders stay on purpose', text: 'Blue is drivers who took the $50 Visa card. They wait in the stadium or at Patriot Place instead of in a queue. Each one is one car fewer blocking everyone behind it. Our plan puts the cards in the lots whose cars block the most.' },
+  { min: 76, title: 'Card lots open', text: 'At the opening time the blue drivers leave. By now the worst of the queue has passed, so they drive out in minutes instead of sitting for an hour. Click any tower to see its numbers.' },
+  { min: 45, title: 'Compare the plans', text: 'Switch between No cards, Today\'s lot and Our lots above, at the same minute. Count the red rings and look at the height of the Route 1 bars.', compare: true },
+];
+let tourAt = -1;
+function tourGo(i) {
+  if (!runs) return;
+  tourAt = Math.max(0, Math.min(TOUR.length - 1, i));
+  const s = TOUR[tourAt];
+  seekTo(s.min);
+  $('story').hidden = false;
+  $('storyStep').textContent = `Step ${tourAt + 1} of ${TOUR.length} · minute ${s.min}`;
+  $('storyTitle').textContent = s.title; $('storyText').textContent = s.text;
+  $('storyPrev').disabled = tourAt === 0; $('storyNext').textContent = tourAt === TOUR.length - 1 ? 'Done' : 'Next';
+}
+$('tour').addEventListener('click', () => tourGo(0));
+$('storyNext').addEventListener('click', () => (tourAt === TOUR.length - 1 ? ($('story').hidden = true) : tourGo(tourAt + 1)));
+$('storyPrev').addEventListener('click', () => tourGo(tourAt - 1));
+$('storyClose').addEventListener('click', () => ($('story').hidden = true));
+document.querySelectorAll('.jumps button').forEach((b) => b.addEventListener('click', () => seekTo(+b.dataset.min)));
+
 // ---------- UI ----------
 const outs = { cars: fmt, train: fmt, budget: (v) => `$${fmt(v)} = ${fmt(v / CARD_USD)} cards`, speed: (v) => `1 s = ${v / 60} min` };
 for (const id of Object.keys(outs)) { const f = () => ($(id + 'Out').textContent = outs[id](+$(id).value)); $(id).addEventListener('input', f); f(); }
 $('plan').addEventListener('click', plan);
-document.querySelectorAll('.seg button').forEach((b) => b.addEventListener('click', () => startReplay(b.dataset.kind)));
-$('pause').addEventListener('click', () => { if (!game) return; paused = !paused; $('pause').textContent = paused ? 'Resume' : 'Pause'; });
+// Before / after: switching plans keeps the same minute, so the same moment can be compared.
+document.querySelectorAll('.seg button').forEach((b) => b.addEventListener('click', () => {
+  const min = game ? Math.floor(game.t / 60) : 0, wasPaused = paused;
+  startReplay(b.dataset.kind); seekTo(min);
+  if (!wasPaused) { paused = false; $('pause').textContent = 'Pause'; }
+}));
+$('pause').addEventListener('click', () => {
+  if (!game) return;
+  if (!running) { startReplay(view); }           // finished: play again from the whistle
+  paused = !paused; $('pause').textContent = paused ? 'Play' : 'Pause';
+});
 $('restart').addEventListener('click', () => startReplay(view));
 $('save').addEventListener('click', () => {
   const r = saveEvent(runs.ours.record);
@@ -328,7 +430,8 @@ renderer.setAnimationLoop((now) => {
   }
   if (running && !paused && game) {
     simAcc += dt * +$('speed').value;
-    let steps = 0; while (simAcc >= 3 && steps < 400) { simAcc -= 3; steps++; if (game.step()) { running = false; break; } }
+    let steps = 0; while (simAcc >= 3 && steps < 400) { simAcc -= 3; steps++; if (game.step()) { running = false; paused = true; $('pause').textContent = 'Play again'; break; } }
+    if (selected && (labelTick === 0)) showInfo(selected);
   }
   drawLayers();
   renderer.render(scene, camera); labels.render(scene, camera);
