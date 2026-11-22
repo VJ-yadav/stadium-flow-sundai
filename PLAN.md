@@ -1,280 +1,205 @@
-# Today's plan: Stadium Flow at Sundai Hack 150
+# Stadium Flow: the delayed-lot planner for Gillette Stadium
 
-Demos at 20:00. Feature freeze 18:30. Read this first; [README.md](README.md) has more background.
+Sundai Hack 150, MIT E38, 23 November 2026. Team: Vijay, Maggie, Sid.
 
-## What we're building, in plain words
+> **One line:** Gillette already pays fans $50 to leave one lot late. Stadium Flow tells the
+> operator **which lots, and how many**, to make delayed lots for tonight's game, shows the effect
+> on a 3D model of Route 1, and gets better each game by remembering how fast every gate really
+> emptied.
 
-After a Patriots game, about 13,000 cars try to leave Gillette at once, and there is one road out:
-Route 1. The road can only take so many cars a minute, so people sit in the parking lots for an
-hour or more.
+## The problem
 
-The stadium already does one smart thing. Drivers who park in its **delayed-release lots** get a
-**$50 Visa gift card**, and that lot stays closed until **75 minutes after the game**. Fewer cars
-at the whistle means the rest get out faster. Over 1,000 cars a game use it. But it's always the
-same lots, always 75 minutes, and nobody checks whether that's the best use of the money.
+After a Patriots game about 13,000 cars try to leave at once through one road, Route 1. The road
+carries about 1,800 cars per lane per hour, so the crowd can't all leave in the first half hour.
+The queue backs up from Route 1 into the lots: a lot's gate can't let anyone out when the road
+outside it is full. People sit in running cars for close to an hour.
 
-A **"card"** in this plan means one car that agrees to stay parked until the card lots open, for
-$50. A $50,000 budget pays for 1,000 cars.
+## What Gillette does today
 
-**We're building a planning tool for the people who run game-day traffic.** Before a game it
-answers one question:
+Gillette's "Be Paid to Park" program (stadium parking page, 2025 season):
 
-> "We have $50,000 for cards. Which lots should get them?"
+- **Lots 45 and 55B are delayed lots.** Parking there is free, fans reserve a spot before the
+  game, the lot is locked 30 minutes after kickoff, and it opens **75 minutes after the game**.
+- **Every car in a delayed lot gets a $50 Visa gift card.**
+- Stadium-side lots are paid. General parking across Route 1 is free.
 
-After the game, it saves what happened, so the next answer is better.
+So the operator already has the lever. What they don't have is a way to decide **which lots** to
+delay and **how many**, for a given game, and to see the effect before the night.
 
-**Not today:** a fan app, fan accounts, payments, or the localmem API. Memory is kept in the
-browser (see "Memory" below).
+## What Stadium Flow does
 
-## How it works
+1. **Before the game** the operator enters the night: cars expected, fans on trains, contraflow
+   lane or not, the card budget, and when delayed lots open.
+2. **The planner recommends delayed lots.** It tries each lot as a delayed lot on a traffic model
+   of the real 7.3 km of Route 1, adds the lot that helps most per dollar, tries again with that
+   lot included (lots on the same stretch of road help each other less), and stops when the
+   budget is spent. A delayed lot is the whole lot: every car in it is held and gets the card.
+3. **The operator can overrule it.** Every lot can be switched between delayed and normal, from
+   a list or by clicking its tower on the map, and the plan is re-tested in a few seconds.
+4. **The 3D view replays the night** for three plans on the same clock: no delayed lots,
+   today's Lot 55, and the plan.
+5. **After the game the operator saves it.** The record holds how fast each lot's gates really
+   let cars out. The next plan uses those counts instead of the guess (15 cars a minute).
 
-### 1. Before the game: the operator enters the event
+## What the operator sees (the numbers that matter to them)
 
-Expected cars, fans on trains, contraflow lane yes or no, and the card budget.
+We measure the night the way an operator or the town would judge it, not by one average:
 
-### 2. The tool compares two plans on a model of the real Route 1
+| Number | What it means |
+|---|---|
+| **Gate-minutes blocked** | Minutes a lot had cars waiting at its gate while Route 1 outside was full, added up over all lots. The "stuck in the lot" feeling. |
+| **Engine idling, all cars** | Hours spent in a car with the engine on: in the lot queue and on Route 1. |
+| Route 1 jammed | Minutes with 400 m or more of Route 1 at walking pace. |
+| Cars stuck at the worst moment | Cars waiting in lots or on packed road at the peak, about 28 minutes after the whistle. |
+| Avg whistle to highway | Shown, but it barely moves (see below). |
 
-- **Today's plan:** cards go to the one fixed lot. In our map data that is Lot 55, standing in
-  for the stadium's Lots 45 and 55B, which aren't named in OpenStreetMap.
-- **Our plan:** for every lot, and each direction (north to I-95, south to I-495), the model asks:
-  *"if 100 cars from here leave 75 minutes later, how many minutes of driving does everyone
-  save?"* The cards go to the lots where that number is highest.
+**Why time-to-highway barely moves, and why that's fine:** Route 1 carries the same number of cars
+an hour whatever we do. Delayed lots don't make the road faster. They move about 1,000 cars' wait
+out of running cars and out of the jam, into the stadium and Patriot Place, so the other lots'
+gates are blocked less and fewer engines idle. Those fans get home about an hour later, for free
+parking and $50. That is the trade Gillette already makes; we make it pay off more.
 
-For each plan it shows:
-- **Average time in the car**, from the moment you get to your car until you're out on the highway.
-- **When the last car leaves.**
-- **Minutes saved per $1,000:** the time in the car we remove, added up over every car, for each
-  $1,000 of cards. This is the one number that says which plan uses the money better.
+## Results (14,000 cars, 3,000 on trains, $50,000 budget, real gate speeds)
 
-### 3. The game is played
+Default merge rule ("Route 1 mostly first", see the next section). First game, no memory yet:
 
-The model plays the game with the plan the operator picked. In the demo, the model also plays the
-part of the real world (see "Realistic assumptions").
+| | No delayed lots | Today: Lot 55 | Plan (7 lots) |
+|---|---|---|---|
+| **Gate-minutes blocked** | 1,301 | 1,178 (−9%) | **953 (−27%)** |
+| **Engine idling** | 12,002 h | 11,408 h (−594 h) | **11,010 h (−992 h)** |
+| Route 1 jammed | 100 min | 97 min | 102 min |
+| Cars held (one card each) | 0 | 750 | 951 |
+| Card cost | $0 | $37,500 | $47,550 |
 
-### 4. After the game: the tool saves what happened
+**For 27% more money than today's lot, about three times the drop in blocked gates and 1.7 times
+the idling saved.** The plan does it with smaller lots spread along Route 1, where each held car
+unblocks the most gates behind it, instead of one big lot.
 
-It records, per lot:
-- how many cards were offered and how many were taken,
-- **how many cars a minute actually got out of each lot's gates.** Parking staff or a gate counter
-  can count this.
+Second game, after saving the first one's gate counts: the planner swaps three lots whose gates
+turned out slower or faster than assumed. Route 1 jammed 92 min instead of 102; blocked gates and
+idling about the same (969 gate-minutes, 900 h saved). The first plan was already close; memory
+mostly corrects lots the guess got wrong, and each change is explained on screen with the count
+that caused it.
 
-### 5. Next game: the plan uses what was saved
+Run it yourself: `node scripts/check_plan.mjs` (add `--zipper=0` or `--zipper=1` for the other
+merge rules).
 
-The biggest unknown is how fast each lot really empties. Some lots have one narrow exit; some have
-three. We start by assuming 15 cars a minute for every lot. After one game, the counts show the
-real speeds, and the plan changes. The screen says what changed and why, for example:
+## Maggie's zipper merge: what it models and why it matters
 
-> Lot 52: last game its gates let out about 6 cars a minute (we had assumed 15). Holding one car
-> there now saves about 103 minutes of driving in total, up from 76. So 156 more cards ($7,800).
+**What it is.** When the road beside a lot's gate is full, who goes next: a car already on Route 1,
+or a car waiting at the gate? Our first model said Route 1 always goes first. Maggie's branch adds
+the standard rule from traffic research (Daganzo 1995, the merge in the cell transmission model):
+the space that opens is **shared between the road and the gates in proportion to their
+capacities**. A gate that lets out 15 cars a minute beside two lanes (60 a minute) gets 20% of
+the space. A setting from 0 to 1 says how strongly gates get their share:
 
-## Does it actually help? What the model says (run `node scripts/check_plan.mjs`)
+| Setting | In plain words |
+|---|---|
+| 0 | Route 1 cars always go first. Lots wait until the road behind them thins out. |
+| **0.25 (our default)** | Route 1 mostly goes first; gates get a quarter of their fair share. |
+| 0.5 | In between. |
+| 1 | Full zipper: gates get their full share, like cars taking turns at a merge. |
 
-13,280 cars (14,000 minus 3,000 fans on trains), two lanes north, $50,000 budget:
+**Why it is good for the model.**
 
-| | Avg time in car | Minutes saved per $1,000 |
+- **It is closer to how a real merge works.** Drivers at a gate do get in; police at Gillette wave
+  lots out in turns. A model where a gate waits for an empty road overstates how long the lots
+  nearest the highway sit, and understates how long the road itself stays packed.
+- **It changes who waits, not only how long.** Maggie's runs (14,000 cars, 2 lanes north), average
+  minutes waiting in the lot:
+
+  | Lots by where they join Route 1 | Route 1 first (0) | Full zipper (1) |
+  |---|---|---|
+  | Southern lots (5,462 cars) | 13 | 75 |
+  | Middle lots (4,569 cars) | 47 | 36 |
+  | Northern lots, nearest I-95 (3,969 cars) | 99 | 13 |
+
+  Around 0.25 the three groups wait about the same, which is why we use it as the default.
+
+- **It keeps us honest.** With Route 1 always first, our plan looked like it halved the time
+  Route 1 is jammed (52 to 25 min). With merges shared, the road itself becomes the queue, and the
+  jam barely moves for any plan. We now lead with the numbers that hold under every rule.
+
+**What it does to our results** (first game, $50,000, real gate speeds):
+
+| Merge rule | Blocked gate-minutes: none, Lot 55, plan | Idling saved: Lot 55, plan | Route 1 jammed: none, Lot 55, plan |
+|---|---|---|---|
+| 0, Route 1 first | 1,118, 1,040 (−7%), **710 (−36%)** | 652 h, **869 h** | 52, 42, **19** min |
+| **0.25, default** | 1,301, 1,178 (−9%), **953 (−27%)** | 594 h, **992 h** | 100, 97, 102 min |
+| 1, full zipper | 1,814, 1,637 (−10%), **1,359 (−25%)** | 515 h, **890 h** | 111, 106, 109 min |
+
+So: **under every rule the plan beats today's lot on blocked gates and idling.** How much Route 1's
+jam shortens depends on the rule, which we can't know until we see a real night. The merge rule is
+a setting in the planner so the operator can see that range. Real gate and road counts from one
+game would tell us which rule fits Gillette; that is the next thing memory should learn.
+
+## Memory: what is saved, for whom
+
+- **Saved after each game, per lot:** how many cars a minute its gates really let out (from the
+  5 busiest minutes, only lots with 100 or more queued cars), when it emptied, and the plan used.
+  No names, plates or phones.
+- **For the operator:** the next plan uses real gate speeds instead of a guess, and says which
+  lots changed and why ("Lot 41: its gate let out about 6 cars a minute in game 1, we had
+  assumed 15; now a delayed lot.").
+- **Where:** in the browser for the demo (`src/memory.js`, with download). Sid's `api/events.js`
+  can save the same records to localmem, with a local file fallback; it is merged but not wired
+  into the demo.
+
+## How to read the screen
+
+- **Icons on the left** (top on a phone): Plan, Results, Past games, Map key. Each opens a large
+  panel; click the icon again or press Esc to fold it away and see the whole map.
+- **Towers** are lots. Height is the cars still in the lot (1,000 cars is about 200 m). White: not
+  at the car yet. Amber: in the car, engine on, trying to get out. **Blue: a delayed lot, waiting
+  on purpose.**
+- **Bars along Route 1** are the queue, one per 40 m and direction: green moving, tall and red
+  packed.
+- **Red rings** are blocked gates; the red line points to the stretch of Route 1 blocking it.
+- **Player bar** at the bottom: switch No delayed lots / Today: Lot 55 / Plan at the same minute,
+  Play, jump to a moment. The top right shows the same counts for the plan you compare against.
+- **Click a tower** to fly to it, see its numbers, and switch it between delayed and normal.
+- **Zoom**: scroll or pinch (toward the pointer), the + and − buttons, or "Go to a lot".
+
+## The 5-minute demo
+
+| Time | What we show | What we say |
 |---|---|---|
-| No cards at all | 54 min | n/a |
-| Today's plan (one fixed lot) | 52 min | 1,268 |
-| Our plan, first game (no history yet) | 47 min | 1,882 |
-| Our plan, second game (after learning gate speeds) | 47 min | 1,984 |
+| 0:00 | The 3D map paused at the whistle, 13,000 cars in white towers | "After a Patriots game, 13,000 cars leave through one road. People sit in running cars for close to an hour." |
+| 0:30 | Jump to 30 min: amber towers, red Route 1 bars, red rings | "This is the broken part. The lots aren't slow; the road outside is full, so the gates are blocked." |
+| 1:00 | Plan panel | "Gillette already pays $50 a car to hold one lot until 75 minutes after the game. The operator's question is which lots, and how many." |
+| 1:30 | Recommend delayed lots; Results panel | "Same kind of budget. Today's lot cuts blocked gates 9%. These seven smaller lots cut them 27% and save about 1,000 hours of idling." |
+| 2:15 | Switch Today / Plan at minute 30 | "Same moment, two plans: count the red rings." |
+| 2:45 | Click a tower, make it a normal lot, re-test | "The operator stays in charge: switch any lot, see the effect in seconds." |
+| 3:15 | Merge rule setting, 0 to 1 | "We don't know yet how Gillette's merges behave. Under every rule the plan beats today's lot; the jam itself shortens only if Route 1 gets priority." |
+| 3:45 | Save the game, plan again, "What memory changed" | "Each game we count how fast every gate really emptied. Next game the plan swaps the lots the guess got wrong, and says why." |
+| 4:30 | Close | "Same lever Gillette already pulls, aimed better, getting better every game." |
 
-**What that means in plain terms:**
-1. **Spending the cards on the right lots saves about 50% more driving time per dollar** than the
-   fixed lot.
-2. **Memory adds about 5% more** after one game, and **the forecast becomes accurate.** Game 1's
-   plan predicted 43.7 minutes and the real game gave 47.4. Game 2 predicted 46.7 and got 46.6.
-   An operator can trust the plan's numbers.
-3. **The last car still leaves 2 to 4 hours after the game.** No plan widens the road. What
-   changes is how many people spend that time sitting in a car with the engine running.
+## Realistic assumptions (said out loud)
 
-These numbers come from our model with made-up lot speeds, not from real Gillette data. The model
-is the tool; the real numbers need the stadium's counts.
-
-## What exactly do we save, and who gets it?
-
-Route 1 lets out about the same number of cars an hour whatever we do. So **the time when everyone
-is finally gone barely moves** (on average about 2 minutes sooner with our lots). What changes is
-**how people spend the wait:**
-
-- **Without cards:** most of the wait is spent **sitting in a car**, engine running, inching
-  through the lot and onto Route 1.
-- **With cards in the right lots:** card holders spend that time **in the stadium or at Patriot
-  Place**, then drive out in a few minutes. With fewer cars in the queue, **everyone else sits
-  about 7 minutes less in the car**.
-
-Who benefits:
-- **Every driver:** less time stuck in traffic.
-- **The town:** shorter queues on Route 1 and fewer rideshares cutting through side streets.
-- **The stadium:** each dollar saves about 50% more driving time than today's lot, and the whole
-  budget can be used (today's one lot only fills about 310 cards). Patriot Place keeps card
-  holders for an extra hour.
-
-## When should the card lots open? (Not always 75 minutes)
-
-The plan also tests opening the card lots at 30, 45, 60, 75, 90 and 105 minutes. Open too early
-and card holders drive into the jam; open too late and they wait for nothing.
-
-| Game | Advice | Why |
+| Assumption | Value | Source or reason |
 |---|---|---|
-| 8,000 cars | **Open at 60 min** | The road clears sooner; card holders get home 15 min earlier for 95% of the benefit |
-| 13,000 cars, contraflow lane | **75 min is right** | Opening later adds almost nothing |
-| 13,000 cars, no contraflow | **75 is too early** | Route 1 is still jammed; opening at 90 to 105 saves 25 to 50% more |
-
-So the right time depends on the game. Each saved game shows when Route 1 actually cleared, and
-that sets the next game's opening time.
-
-## Backup build
-
-If time runs short, branch **`backup-full-demo`** has the whole demo working: the planner panel,
-lots as 3D columns, Route 1 queue bars, red rings on blocked gates, the No cards / Today / Ours
-replay, and saving games. Merge it, or copy parts of it.
-
-## Realistic assumptions (said out loud in the demo)
-
-| Assumption | Value | Why we think it's fair |
-|---|---|---|
-| Road capacity | 1,800 cars per lane per hour | The standard figure traffic engineers use |
-| Lot gates | **6 to 24 cars a minute, different per lot**, unknown to the plan at first | Lots differ in exits and staff; we have no real counts |
-| Share who take the card | **20% to 80%, different per lot** | Gillette says 1,000+ cars a game use its delayed lot |
+| Road capacity | 1,800 cars per lane per hour | Standard traffic engineering figure |
+| Lot gates | 6 to 24 cars a minute, different per lot, hidden from the planner | No real counts; memory learns them |
+| Merge rule | 0.25 by default, 0 to 1 in the planner | Maggie's model; unknown for Gillette |
+| Delayed lot | Whole lot held, opens at 75 min, $50 a car | Gillette's 2025 parking page |
 | Heading north | 60% | Estimate; I-95 north to Boston is the bigger flow |
-| Cars | 14,000 minus about 1,200 per 5,000 train riders | Lot area estimate; the train figure is from Foxborough police |
-| When people leave | 55% within 15 min of the end, the rest spread over 90 min | Estimate |
+| Cars | 14,000 minus about 1,200 per 5,000 train riders | Lot area estimate; Foxborough police for trains |
+| When people leave | 55% within 15 min of the end, the rest over 90 min | Estimate |
+| Lot names | OpenStreetMap; "Lot 55" stands in for Gillette's Lots 45 and 55B | Some OSM lots may not be Gillette's to delay |
 
-The "real" lot speeds and take rates are hidden in the code (`trueExit`, `trueTake` in
-`src/plan.js`). The plan never reads them. It only learns from saved game records, the same way it
-would at the real stadium.
+## Who did what
 
-## Why 3D? What it should show
+- **Vijay:** the planner (`src/plan.js`): whole delayed lots, choosing lots by blocked gates,
+  idling and jam, the operator's switches, memory of gate speeds, the operator screen.
+- **Maggie:** the zipper merge in the traffic model (`src/sim.js`), with the lot-wait comparison.
+- **Sid:** 3D v2 (the comparison plan on the same clock, cars waiting at gates, readable map
+  credits) and the events API (`api/events.js`, `server/events.js`) for saving games to localmem.
 
-A map that just looks real isn't enough. Think of a 3D cutaway of an engine: it's useful because
-it shows **the part that's failing and why**. Our 3D view should do the same for the exit:
+## Branches and next steps
 
-1. **Lots as tanks.** A column over each lot, as tall as the number of cars still inside. You see
-   which lots drain and which stay full.
-2. **The road as a queue.** Route 1 coloured, or raised, by how packed each stretch is. You watch
-   the jam start at the merge and grow back toward the lots.
-3. **The broken part: blocked gates.** When the road next to a lot's exit is full, that gate can't
-   let anyone out. Show it as a red ring on the exit. This is the real cause of the hour in the
-   lot: not the lot, but the road backing up into it.
-4. **Card holders in their own colour.** They stay parked, then leave at +75 minutes onto a road
-   that's moving.
-5. **Today vs ours on the same clock.** One switch replays either plan, so you see fewer red rings
-   and shorter queues with ours.
-
-That is what the 20-second clip should show: **in today's plan the gates by the merge go red and
-stay red; in ours, the cards empty out exactly those spots.**
-
-## Memory (local for now)
-
-- A game record is saved in the browser (`src/memory.js`: `listEvents`, `saveEvent`,
-  `exportEvents`, `importEvents`).
-- Records are counts per lot: no names, plates or phones.
-- Export and import a JSON file so the demo can start from a known history.
-- Later, the same records can move to a memory service such as localmem. Nothing else changes.
-
-## How the pieces connect (for Maggie and Sid)
-
-```js
-import { buildNet, planEvent, runEvent } from './plan.js';
-import { listEvents, saveEvent } from './memory.js';
-
-const net = buildNet(data);                         // data = public/data/foxborough.json
-const conditions = { cars: 14000, trains: 3000, contraflow: false, budget: 50000 };
-
-const plan = planEvent(net, conditions, listEvents()); // takes 4 to 10 s: show "Planning..."
-// plan.today / plan.ours: { kind, budget, cards: { 'Lot 52': 156, ... }, result: {...} }
-// plan.ours.result: { avgInCarMin, lastOutMin, carMinSaved, spent, perThousand, offered, taken }
-// plan.why: [ 'Lot 52: last game its gates let out about 6 cars a minute ...' ]
-// plan.values: [{ lot, dir, cars, value }] every group ranked, best first
-
-const { record, replay } = runEvent(net, conditions, plan.ours, 'game-2');
-saveEvent(record);                                  // record.result.exitPerMin = gate counts
-const { game, held, crowd } = replay();             // a fresh Game to step for the 3D view
-// game.step() moves 3 s; game.state[i]: 0 parked, 1 waiting in lot, 2 on Route 1, 3 gone
-// game.cell[dir][c].length = cars in road cell c; game.lotQ[l].length = cars queued at lot l
-// held[i] = 1 if car i took a card; crowd.lot[i] = its lot
-```
-
-There's a sample output to build the screen against before wiring it up:
-`public/data/plan.sample.json`.
-
-## Who does what
-
-| | Owns | Files |
-|---|---|---|
-| **Vijay** | Plan logic (done: `src/plan.js`), wiring it into the page, numbers, demo script, recording, submission, Google key | `src/plan.js`, `src/sim.js`, `scripts/` |
-| **Maggie** (`hello-magnolia`) | The operator screen: event inputs, the two-plan table, the "why" lines, past games | `index.html`, `src/ui/` |
-| **Sid** (`siddhrajp`) | The 3D "what's going on" layers, the Today/Ours replay, deploy | `src/main.js`, `src/layers/` |
-
-Owning a file means you merge changes to it; ask before editing someone else's. Swap if you prefer.
-
-## Maggie's tasks: the operator screen
-
-| By | Task | Done when |
-|---|---|---|
-| 11:45 | Run the app (`npm install`, `npm run dev`, key line in `.env.local`); read this file and `plan.sample.json` | Gillette on your screen |
-| 13:00 | **Event panel:** cars, fans on trains, contraflow, budget ($0 to $100,000 in $5,000 steps, showing "= N cards"), and a **Plan game** button. Replace the old sliders | The inputs make a `conditions` object |
-| 14:00 | **Two-plan table** from `plan.sample.json`: columns Today and Ours; rows avg time in car, last car out, minutes saved per $1,000, money spent; under it the top lots getting cards | It reads well to someone who's never seen it |
-| 15:00 | **Wire it up:** call `planEvent` on click with "Planning..." while it runs (or move it to a Web Worker), then fill the table with live numbers | Changing the budget changes the table |
-| 16:00 | **Past games:** a "Play game and save" button (`runEvent` + `saveEvent`), the list of past games from `listEvents()`, the `why` lines under the table, and "Reset history" | Plan, play and save, plan again: the why lines appear |
-| 17:00 | Polish: phone width, plain labels, the assumptions in one "How this works" popover | Works at 390 px wide |
-
-## Sid's tasks: the 3D layers and deploy
-
-| By | Task | Done when |
-|---|---|---|
-| 11:45 | Run the app; read `src/main.js` (`startGame`, `drawCars`, `finishGame`) and the `Game` class in `src/sim.js` | You can explain how a car moves from lot to road |
-| 13:00 | **Lots as tanks:** a column per lot (`data.lots[i].c` is its centre), height = cars still inside, updated each frame | Columns shrink as lots empty |
-| 14:00 | **Road as a queue:** colour or raise Route 1 cells by `game.cell[dir][c].length` (packed = red) | You see the jam grow back from the merge |
-| 15:00 | **Blocked gates:** a red ring on a lot exit when its road cell (`net.lots[l].cell`) is full and the lot still has cars waiting | Red rings appear near the merge at the whistle |
-| 16:00 | **Card holders and replay:** held cars in their own colour; a Today/Ours switch that replays either plan from `runEvent(...).replay()` | Switching plans shows fewer red rings with ours |
-| 17:30 | **Deploy** to Vercel or Netlify (a static site, no server), with `VITE_GOOGLE_MAPS_KEY` set in the host; send Vijay the domain for the Google key | The public link works on a phone |
-
-## Vijay's tasks
-
-| By | Task |
-|---|---|
-| Done | `src/plan.js`, `src/memory.js`, `scripts/check_plan.mjs`, `plan.sample.json` |
-| 13:00 | Help Maggie and Sid wire in; keep `planEvent` under 10 s (Web Worker if needed) |
-| 15:00 | A "start from history" JSON with two past games for the demo |
-| 17:30 | Add the deploy domain to the Google key |
-| 18:45 | Check every number on screen; demo script; recording; submission |
-
-## The day
-
-| Time | Milestone |
-|---|---|
-| 11:45 | Everyone running, this file read |
-| 13:00 | M1: event panel, lot tanks |
-| 15:00 | M2: live table, road queue, blocked gates |
-| 16:00 | M3: save a game, plan again, why lines; Today/Ours replay |
-| 17:30 | M4: public link |
-| 18:30 | Feature freeze, fixes only |
-| 18:45 | Recording |
-| 19:00 | Rehearse twice, under 3 minutes |
-| 19:45 | Submit |
-
-## The 3-minute demo
-
-| At | On screen |
-|---|---|
-| 0:00 | Gillette in 3D. "One road out. 13,000 cars. You run game-day traffic, and you have $50,000 for cards." |
-| 0:30 | Plan game. Today's lot vs ours: minutes saved per $1,000, 1,268 vs 1,882 |
-| 1:00 | Replay today's plan: red rings at the gates by the merge, a long queue on Route 1. Switch to ours: the cards empty exactly those spots |
-| 1:45 | Play and save. Plan the next game: "Lot 52's gates let out 6 cars a minute, not 15, so 156 more cards there." 1,984 per $1,000, and the forecast now matches what happens |
-| 2:30 | "This needs one thing from a real stadium: gate counts per lot. We want one operator to try it for a season." |
-
-## Team rules
-
-- No keys in the repo. The Google key line is shared by private message.
-- Small commits to `main`, pull before you push, and say in the chat what you're starting.
-- Plain words on screen. Every number is either sourced or labelled an estimate.
-- If a milestone slips 30 minutes, cut scope, not the demo. Cut in this order: phone polish, the
-  past-games list (keep the why lines), the road colours (keep the red rings).
-
-## If something breaks
-
-- **Google tiles fail on the venue wifi:** the OpenStreetMap model loads on its own.
-- **`planEvent` is too slow on a laptop:** use a smaller budget step, or a cached `plan.sample.json`.
-- **Our plan doesn't win on some setting:** say so, and show which lots mattered. That's still a
-  result.
+- **`backup-full-demo`** has everything merged: the planner, Maggie's merge rule and both of Sid's
+  branches. Test it locally first (`npm ci`, then `npm run dev`, open localhost:5173).
+- **`main`** takes it once the team has looked at it locally.
+- **Deploy (Vercel)** after that: add the deploy address to the Google key's allowed sites.
+- After the demo: delete the one-day Google key; wire Sid's events API into the app; learn the
+  merge rule from real counts.
