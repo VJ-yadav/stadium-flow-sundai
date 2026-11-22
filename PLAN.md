@@ -8,9 +8,13 @@ After a Patriots game, about 13,000 cars try to leave Gillette at once, and ther
 Route 1. The road can only take so many cars a minute, so people sit in the parking lots for an
 hour or more.
 
-The stadium already does one smart thing: it pays **$50 to drivers in one lot who agree to leave
-75 minutes after the game**. Fewer cars at the whistle means the rest get out faster. But it's
-always the same lot, and nobody checks whether that lot is the best place to spend the money.
+The stadium already does one smart thing. Drivers who park in its **delayed-release lots** get a
+**$50 Visa gift card**, and that lot stays closed until **75 minutes after the game**. Fewer cars
+at the whistle means the rest get out faster. Over 1,000 cars a game use it. But it's always the
+same lots, always 75 minutes, and nobody checks whether that's the best use of the money.
+
+A **"card"** in this plan means one car that agrees to stay parked until the card lots open, for
+$50. A $50,000 budget pays for 1,000 cars.
 
 **We're building a planning tool for the people who run game-day traffic.** Before a game it
 answers one question:
@@ -85,6 +89,44 @@ real speeds, and the plan changes. The screen says what changed and why, for exa
 
 These numbers come from our model with made-up lot speeds, not from real Gillette data. The model
 is the tool; the real numbers need the stadium's counts.
+
+## What exactly do we save, and who gets it?
+
+Route 1 lets out about the same number of cars an hour whatever we do. So **the time when everyone
+is finally gone barely moves** (on average about 2 minutes sooner with our lots). What changes is
+**how people spend the wait:**
+
+- **Without cards:** most of the wait is spent **sitting in a car**, engine running, inching
+  through the lot and onto Route 1.
+- **With cards in the right lots:** card holders spend that time **in the stadium or at Patriot
+  Place**, then drive out in a few minutes. With fewer cars in the queue, **everyone else sits
+  about 7 minutes less in the car**.
+
+Who benefits:
+- **Every driver:** less time stuck in traffic.
+- **The town:** shorter queues on Route 1 and fewer rideshares cutting through side streets.
+- **The stadium:** the same $50,000 buys more than three times the result of today's lot, and
+  Patriot Place keeps card holders for an extra hour.
+
+## When should the card lots open? (Not always 75 minutes)
+
+The plan also tests opening the card lots at 30, 45, 60, 75, 90 and 105 minutes. Open too early
+and card holders drive into the jam; open too late and they wait for nothing.
+
+| Game | Advice | Why |
+|---|---|---|
+| 8,000 cars | **Open at 60 min** | The road clears sooner; card holders get home 15 min earlier for 95% of the benefit |
+| 13,000 cars, contraflow lane | **75 min is right** | Opening later adds almost nothing |
+| 13,000 cars, no contraflow | **75 is too early** | Route 1 is still jammed; opening at 90 to 105 saves 25 to 50% more |
+
+So the right time depends on the game. Each saved game shows when Route 1 actually cleared, and
+that sets the next game's opening time.
+
+## Backup build
+
+If time runs short, branch **`backup-full-demo`** has the whole demo working: the planner panel,
+lots as 3D columns, Route 1 queue bars, red rings on blocked gates, the No cards / Today / Ours
+replay, and saving games. Merge it, or copy parts of it.
 
 ## Realistic assumptions (said out loud in the demo)
 
